@@ -9,32 +9,19 @@ using System.Net.Sockets;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
+using rc2_core;
 
 namespace rc2_dvm
 {
     /// <summary>
-    /// Valid states a virtual channel can have
+    /// Represents a single virtual channel which can be connected to RC2
     /// </summary>
-    public enum VirtualChannelState
-    {
-        DISCONNECTED,
-        IDLE,
-        RX,
-        TX,
-        ERROR
-    }
-
     public partial class VirtualChannel
     {
         /// <summary>
         /// Configuration for this virtual channel
         /// </summary>
         public VirtualChannelConfigObject Config;
-
-        /// <summary>
-        /// Current state of the virtual channel
-        /// </summary>
-        public VirtualChannelState State { get; private set; } = VirtualChannelState.DISCONNECTED;
 
         private MBEEncoder encoder;
         private MBEDecoder decoder;
@@ -46,6 +33,10 @@ namespace rc2_dvm
         private SlotStatus[] status;
 
         private uint txStreamId;
+
+        private DVMRadio dvmRadio;
+
+        private ConsoleServer consoleServer;
 
         /// <summary>
         /// Index of the currently selected talkgroup for this channel
@@ -90,13 +81,11 @@ namespace rc2_dvm
             status[1] = new SlotStatus();  // DMR Slot 2
             status[2] = new SlotStatus();  // P25
 
-            // DMR-specific instantiation
-            if (Config.Mode == VocoderMode.DMR)
-            {
-                embeddedData = new EmbeddedData();
-                ambeBuffer = new byte[27];
-            }
+            // Initialize new DVM radio
+            dvmRadio = new DVMRadio(Config.Name, Config.RxOnly);
 
+            // Initialize RC2 server
+            consoleServer = new ConsoleServer(Config.ListenAddress, Config.ListenPort, dvmRadio);
 
             Log.Logger.Information($"Configured virtual channel {Config.Name}");
             Log.Logger.Information($"    Mode: {Config.Mode.ToString()}, Source ID: {Config.SourceId}, Listening on {Config.ListenAddress}:{Config.ListenPort}");
@@ -112,6 +101,28 @@ namespace rc2_dvm
                     Log.Logger.Information($"        TGID {talkgroup.DestinationId} ({talkgroup.Name})");
                 }    
             }
+        }
+
+        /// <summary>
+        /// Start the virtual channel
+        /// </summary>
+        public void Start()
+        {
+            // Start radio
+            dvmRadio.Start();
+            // Start console server
+            consoleServer.Start();
+        }
+
+        /// <summary>
+        /// Stop the virtual channel
+        /// </summary>
+        public void Stop()
+        {
+            // Stop radio
+            dvmRadio.Stop();
+            // Stop server
+            consoleServer.Stop();
         }
 
         /// <summary>

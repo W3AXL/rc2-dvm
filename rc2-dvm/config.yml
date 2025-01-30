@@ -82,6 +82,8 @@ virtualChannels:
 
     # Source ID for this virtual channel ("radio ID")
     sourceId: 12345
+    # Whether this channel is RX-only (TX disabled)
+    rxOnly: false
     
     #
     # Talkgroups for this channel

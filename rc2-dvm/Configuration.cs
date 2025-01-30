@@ -113,6 +113,10 @@ namespace rc2_dvm
         /// List of available talkgroups for this virtual channel
         /// </summary>
         public List<TalkgroupConfigObject> Talkgroups = new List<TalkgroupConfigObject>();
+        /// <summary>
+        /// Whether this channel is RX-only or not (TX disabled)
+        /// </summary>
+        public bool RxOnly = false;
     }
 
     /// <summary>

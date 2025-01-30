@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\fnecore\fnecore.csproj" />
+    <ProjectReference Include="..\rc2-core\rc2-core.csproj" />
   </ItemGroup>
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
