@@ -1,0 +1,98 @@
+#
+# RadioConsole2 DVM FNE Daemon
+#
+
+#
+# Logging Configuration
+#
+#   Logging Levels:
+#     1 - Debug
+#     2 - Message
+#     3 - Informational
+#     4 - Warning
+#     5 - Error
+#     6 - Fatal
+#
+log:
+    # Console display logging level (used when in foreground).
+    displayLevel: 1
+    # File logging level.
+    fileLevel: 1
+    # Full path for the directory to store the log files.
+    filePath: .
+    # Full path for the directory to store the activity log files.
+    activityFilePath: .
+    # Log filename prefix.
+    fileRoot: dvm-rc2
+
+#
+# Network Configuration
+#
+network:
+    # Network Peer ID
+    peerId: 910201
+    # Identity of this peer
+    identity: "RC2DVM Dev"
+    
+    # Hostname/IP of the FNE master to connect to
+    address: core.nexcomsys.net
+    # Port number of the FNE master
+    port: 62031
+    # FNE access password
+    password: "MC45NDE2MWM5YjYwZjM1"
+    # Whether the FNE connection is encrypted
+    encrypted: false
+    # Encryption pre-shared key
+    presharedKey: "000102030405060708090A0B0C0D0E0F000102030405060708090A0B0C0D0E0F"
+
+    # Whether diagnostic information is sent to the FNE
+    allowDiagnosticTransfer: true
+
+    # Whether additional debug is printed to the log
+    debug: false
+
+#
+# Virtual Channel Config
+#
+# Each channel configured here represents a single "radio" that can be connected
+# to an RC2 instance
+#
+virtualChannels:
+    # Channel Name
+  - name: "VirtualChannel1"
+    # Websocket/WebRTC listen address
+    listenAddress: 127.0.0.1
+    # Websocket listen port
+    listenPort: 8810
+    
+    # Channel mode (1 = DMR, 2 = P25)
+    mode: 2
+    # Vocoder Audio Configuration
+    audioConfig:
+        # Post-vocoder RX audio gain
+        rxAudioGain: 1.0
+        # Vocoder RX audio gain (not used for external vocoders)
+        rxVocoderGain: 3.0
+        # Vocoder AGC enabled (not used for external vocoders)
+        rxVocoderAGC: false
+        # Pre-Vocoder TX audio gain
+        txAudioGain: 1.0
+        # Vocoder TX audio gain (not used for external vocoders)
+        txVocoderGain: 3.0
+
+    # Source ID for this virtual channel ("radio ID")
+    sourceId: 12345
+    
+    #
+    # Talkgroups for this channel
+    #
+    # This is a list of talkgroups which will be available for use
+    # by this virtual channel
+    #
+    talkgroups:
+        # Talkgroup Textual name
+      - name: NX-OPS
+        # Talkgroup ID
+        destinationId: 1501
+        # Talkgroup timeslot (only used for DMR talkgroups)
+        timeslot: 1

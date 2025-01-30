@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "rc2-dvm default config": {
+      "commandName": "Project",
+      "commandLineArgs": "-c config.yml",
+      "workingDirectory": "H:\\Git\\rc2-dvm\\rc2-dvm"
+    }
+  }
+}
