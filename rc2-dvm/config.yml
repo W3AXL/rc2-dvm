@@ -59,7 +59,9 @@ network:
 #
 virtualChannels:
     # Channel Name
-  - name: "VirtualChannel1"
+  - name: "NEXCOM DESK 1"
+    # Zone Name (shown in RC2 zone text)
+    zone: "NEXCOM DESK 1"
     # Websocket/WebRTC listen address
     listenAddress: 127.0.0.1
     # Websocket listen port
@@ -96,5 +98,17 @@ virtualChannels:
       - name: NX-OPS
         # Talkgroup ID
         destinationId: 1501
+        # Talkgroup timeslot (only used for DMR talkgroups)
+        timeslot: 1
+        # Talkgroup Textual name
+      - name: NX-EVENT1
+        # Talkgroup ID
+        destinationId: 1601
+        # Talkgroup timeslot (only used for DMR talkgroups)
+        timeslot: 1
+        # Talkgroup Textual name
+      - name: NX-EVENT2
+        # Talkgroup ID
+        destinationId: 1603
         # Talkgroup timeslot (only used for DMR talkgroups)
         timeslot: 1

@@ -14,43 +14,61 @@ using Newtonsoft.Json;
 
 namespace rc2_core
 {
-    public class ConsoleServer
+    public class RC2Server
     {
         private WebSocketServer wss {  get; set; }
 
-        public Radio RadioObj { get; set; }
+        private WebRTC rtc { get; set; }
 
-        private ConsoleBehavior cb { get; set; }
+        private Radio radio { get; set; }
 
-        public ConsoleServer(IPAddress address, int port, Radio _radio)
+        // Flags for TX/RX recording
+        public bool TxRecording
+        {
+            get
+            {
+                return rtc.RecTxInProgress;
+            }
+        }
+        public bool RxRecording
+        {
+            get
+            {
+                return rtc.RecRxInProgress;
+            }
+        }
+
+        public RC2Server(IPAddress address, int port, Radio _radio)
         {
             wss = new WebSocketServer(address, port);
-            RadioObj = _radio;
+            rtc = new WebRTC();
+            radio = _radio;
             // Bind status callback
-            RadioObj.StatusCallback += SendRadioStatus;
+            radio.StatusCallback += SendRadioStatus;
         }
 
         public void Start()
         {
             Serilog.Log.Logger.Information($"Starting websocket server on {wss.Address}:{wss.Port}");
             // Set up the WebRTC handler
-            wss.AddWebSocketService<WebRTCWebSocketPeer>("/rtc", (peer) => peer.CreatePeerConnection = WebRTC.CreatePeerConnection);
+            wss.AddWebSocketService<WebRTCWebSocketPeer>("/rtc", (peer) => peer.CreatePeerConnection = rtc.CreatePeerConnection);
             // Set up the regular message handler
-            wss.AddWebSocketService<ConsoleBehavior>("/", () => new ConsoleBehavior(this));
+            wss.AddWebSocketService<ConsoleBehavior>("/", () => new ConsoleBehavior(this, this.radio));
             // Keeps the thing alive
             wss.KeepClean = false;
             // Start the service
             wss.Start();
         }
 
-        public void Stop()
+        public void Stop(string reason = "")
         {
             wss.Stop();
+            rtc.Stop(reason);
         }
 
         public void SendRadioStatus()
         {
-            string statusJson = RadioObj.Status.Encode();
+            string statusJson = radio.Status.Encode();
             Log.Debug("Sending radio status via websocket");
             Log.Verbose(statusJson);
             SendClientMessage("{\"status\": " + statusJson + " }");
@@ -70,15 +88,33 @@ namespace rc2_core
         {
             wss.WebSocketServices["/"].Sessions.Broadcast($"{{\"nack\": \"{cmd}\"}}");
         }
+
+        public void RecordTx(string filename)
+        {
+            rtc.RecStartTx(filename);
+        }
+
+        public void RecordRx(string filename)
+        {
+            rtc.RecStartRx(filename);
+        }
+
+        public void RecordStop()
+        {
+            rtc.RecStop();
+        }
     }
 
     internal class ConsoleBehavior : WebSocketBehavior
     {
-        private ConsoleServer consoleServer;
-        public ConsoleBehavior(ConsoleServer server)
+        private RC2Server server;
+        private Radio radio;
+        public ConsoleBehavior(RC2Server _server, Radio _radio)
         {
-            consoleServer = server;
+            server = _server;
+            radio = _radio;
         }
+
         protected override void OnMessage(MessageEventArgs e)
         {
             var msg = e.Data;
@@ -100,62 +136,62 @@ namespace rc2_core
                 // Radio Status Query
                 if (jsonObj.radio.command == "query")
                 {
-                    consoleServer.SendRadioStatus();
+                    server.SendRadioStatus();
                 }
                 // Radio Start Transmit Command
                 else if (jsonObj.radio.command == "startTx")
                 {
-                    if (consoleServer.RadioObj.SetTransmit(true))
-                        consoleServer.SendAck("startTx");
+                    if (radio.SetTransmit(true))
+                        server.SendAck("startTx");
                     else
-                        consoleServer.SendNack("startTx");
+                        server.SendNack("startTx");
                 }
                 // Radio Stop Transmit Command
                 else if (jsonObj.radio.command == "stopTx")
                 {
-                    if (consoleServer.RadioObj.SetTransmit(false))
-                        consoleServer.SendAck("stopTx");
+                    if (radio.SetTransmit(false))
+                        server.SendAck("stopTx");
                     else
-                        consoleServer.SendNack("stopTx");
+                        server.SendNack("stopTx");
                 }
                 // Channel Up/Down
                 else if (jsonObj.radio.command == "chanUp")
                 {
-                    if (consoleServer.RadioObj.ChangeChannel(false))
-                        consoleServer.SendAck("chanUp");
+                    if (radio.ChangeChannel(false))
+                        server.SendAck("chanUp");
                     else
-                        consoleServer.SendNack("chanUp");
+                        server.SendNack("chanUp");
                 }
                 else if (jsonObj.radio.command == "chanDn")
                 {
-                    if (consoleServer.RadioObj.ChangeChannel(true))
-                        consoleServer.SendAck("chanDn");
+                    if (radio.ChangeChannel(true))
+                        server.SendAck("chanDn");
                     else
-                        consoleServer.SendNack("chanDn");
+                        server.SendNack("chanDn");
                 }
                 // Button press/release
                 else if (jsonObj.radio.command == "buttonPress")
                 {
-                    if (consoleServer.RadioObj.PressButton((SoftkeyName)Enum.Parse(typeof(SoftkeyName),(string)jsonObj.radio.options)))
-                        consoleServer.SendAck("buttonPress");
+                    if (radio.PressButton((SoftkeyName)Enum.Parse(typeof(SoftkeyName),(string)jsonObj.radio.options)))
+                        server.SendAck("buttonPress");
                     else
-                        consoleServer.SendNack("buttonPress");
+                        server.SendNack("buttonPress");
                 }
                 else if (jsonObj.radio.command == "buttonRelease")
                 {
-                    if (consoleServer.RadioObj.ReleaseButton((SoftkeyName)Enum.Parse(typeof(SoftkeyName),(string)jsonObj.radio.options)))
-                        consoleServer.SendAck("buttonRelease");
+                    if (radio.ReleaseButton((SoftkeyName)Enum.Parse(typeof(SoftkeyName),(string)jsonObj.radio.options)))
+                        server.SendAck("buttonRelease");
                     else
-                        consoleServer.SendNack("buttonRelease");
+                        server.SendNack("buttonRelease");
                 }
                 // Reset
                 else if (jsonObj.radio.command == "reset")
                 {
                     Serilog.Log.Information("Resetting and restarting radio interface");
                     // Stop
-                    consoleServer.RadioObj.Stop();
+                    radio.Stop();
                     // Restart with reset
-                    consoleServer.RadioObj.Start();
+                    radio.Start(true);
                 }
             }
         }
@@ -163,7 +199,7 @@ namespace rc2_core
         protected override void OnClose(CloseEventArgs e)
         {
             Serilog.Log.Warning("Websocket connection closed: {args}", e.Reason);
-            WebRTC.Stop("Websocket closed");
+            server.Stop("Websocket closed");
             //DaemonWebsocket.radio.Stop();
         }
 

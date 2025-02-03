@@ -88,7 +88,11 @@ namespace rc2_dvm
         /// <summary>
         /// Name of this virtual channel
         /// </summary>
-        public string Name;
+        public string Name = "VirtualChannel";
+        /// <summary>
+        /// Zone text for RC2
+        /// </summary>
+        public string Zone = "";
         /// <summary>
         /// Listen address for the console client to connect to
         /// </summary>

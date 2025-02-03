@@ -136,6 +136,14 @@ namespace rc2_dvm
 
         public static void Runtime()
         {
+            // Setup CTRL+C handler
+            ManualResetEvent startShutdown = new ManualResetEvent(false);
+            Console.CancelKeyPress += (sender, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                startShutdown.Set();
+            };
+
             // Setup Logging
             LoggerConfiguration logConfig = new LoggerConfiguration();
             logConfig.MinimumLevel.Debug();
@@ -223,17 +231,33 @@ namespace rc2_dvm
                 fneSystem.Start();
 
                 // Instantiate virtual channels
+                Log.Logger.Debug($"Creating {Configuration.VirtualChannels.Count} virtual channels");
                 Configuration.VirtualChannels.ForEach(channel =>
                 {
                     VirtualChannels.Add(new VirtualChannel(channel));
                 });
 
-                Log.Logger.Information("[RC2-DVM] All processes running");
-                while (!shutdown)
+                // Start
+                Log.Logger.Information("Starting virtual channels");
+                VirtualChannels.ForEach(channel =>
                 {
-                    Thread.Sleep(100);
-                }
+                    channel.Start();
+                });
+
+                // Done starting up
+                Log.Logger.Information("[RC2-DVM] All processes running");
+
+                // Wait for ctrl+c
+                startShutdown.WaitOne();
                 
+                // Stop virtual channels
+                Log.Logger.Information("Stopping virtual channels");
+                VirtualChannels.ForEach(channel =>
+                {
+                    channel.Stop();
+                });
+                
+                // Stop FNE connection
                 if (fneSystem.IsStarted)
                 {
                     Log.Logger.Information($"[RC2-DVM] Stopping FNE system");

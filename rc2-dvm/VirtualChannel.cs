@@ -36,8 +36,6 @@ namespace rc2_dvm
 
         private DVMRadio dvmRadio;
 
-        private ConsoleServer consoleServer;
-
         /// <summary>
         /// Index of the currently selected talkgroup for this channel
         /// </summary>
@@ -81,12 +79,6 @@ namespace rc2_dvm
             status[1] = new SlotStatus();  // DMR Slot 2
             status[2] = new SlotStatus();  // P25
 
-            // Initialize new DVM radio
-            dvmRadio = new DVMRadio(Config.Name, Config.RxOnly);
-
-            // Initialize RC2 server
-            consoleServer = new ConsoleServer(Config.ListenAddress, Config.ListenPort, dvmRadio);
-
             Log.Logger.Information($"Configured virtual channel {Config.Name}");
             Log.Logger.Information($"    Mode: {Config.Mode.ToString()}, Source ID: {Config.SourceId}, Listening on {Config.ListenAddress}:{Config.ListenPort}");
             Log.Logger.Information($"    Talkgroups ({Config.Talkgroups.Count}):");
@@ -101,6 +93,17 @@ namespace rc2_dvm
                     Log.Logger.Information($"        TGID {talkgroup.DestinationId} ({talkgroup.Name})");
                 }    
             }
+
+            // Initialize new DVM radio
+            dvmRadio = new DVMRadio(
+                Config.Name, Config.RxOnly,
+                Config.ListenAddress, Config.ListenPort,
+                Config.Talkgroups, this
+            );
+
+            dvmRadio.Status.ZoneName = Config.Zone;
+            dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
+
         }
 
         /// <summary>
@@ -110,8 +113,6 @@ namespace rc2_dvm
         {
             // Start radio
             dvmRadio.Start();
-            // Start console server
-            consoleServer.Start();
         }
 
         /// <summary>
@@ -121,8 +122,42 @@ namespace rc2_dvm
         {
             // Stop radio
             dvmRadio.Stop();
-            // Stop server
-            consoleServer.Stop();
+        }
+
+        /// <summary>
+        /// Increment the currently selected talkgroup index
+        /// </summary>
+        /// <returns>true if successful, else false</returns>
+        public bool ChannelUp()
+        {
+            if (currentTgIdx >= Config.Talkgroups.Count - 1)
+            {
+                return false;
+            }
+            else
+            {
+                currentTgIdx++;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Decrement the currently selected talkgroup index
+        /// </summary>
+        /// <returns>true if successful, else false</returns>
+        public bool ChannelDown()
+        {
+            if (currentTgIdx > 0)
+            {
+                currentTgIdx--;
+                return true;
+            }
+            else { return false; }
+        }
+
+        private void UpdateStatus()
+        {
+
         }
 
         /// <summary>

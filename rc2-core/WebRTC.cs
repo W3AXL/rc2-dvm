@@ -18,20 +18,20 @@ namespace rc2_core
     public class WebRTC
     {
         // Objects for RX audio processing
-        private AudioEncoder RxEncoder = null;
+        private AudioEncoder RxEncoder;
         private AudioFormat RxFormat = AudioFormat.Empty;
         
         // Objects for TX audio processing
-        public AudioEncoder TxEncoder = null;
+        public AudioEncoder TxEncoder;
         private AudioFormat TxFormat = AudioFormat.Empty;
 
         // We make separate encoders for recording since some codecs can be time-variant
-        public AudioEncoder RecRxEncoder = null;
-        private AudioEncoder RecTxEncoder = null;
+        public AudioEncoder RecRxEncoder;
+        private AudioEncoder RecTxEncoder;
 
         // Objects for TX/RX audio recording
         public bool Record = false;          // Whether or not recording to audio files is enabled
-        public string RecPath = null;        // Folder to store recordings
+        public string RecPath = "";        // Folder to store recordings
         public string RecTsFmt = "yyyy-MM-dd_HHmmss";       // Timestamp format string
         public bool RecTxInProgress = false;   // Flag to indicate if a file is currently being recorded
         public bool RecRxInProgress = false;
@@ -39,22 +39,42 @@ namespace rc2_core
         private float recTxGain = 1;
 
         // Recording format (TODO: Make configurable)
-        private WaveFormat recFormat = null;
+        private WaveFormat recFormat;
         // Output wave file writers
-        private WaveFileWriter recTxWriter = null;
-        private WaveFileWriter recRxWriter = null;
+        private WaveFileWriter recTxWriter;
+        private WaveFileWriter recRxWriter;
 
         // WebRTC variables
-        private MediaStreamTrack RtcTrack = null;
-        private RTCPeerConnection pc = null;
+        private MediaStreamTrack RtcTrack;
+        private RTCPeerConnection pc;
         public string Codec { get; set; } = "G722";
 
         // Flag whether our radio is RX only
         public bool RxOnly {get; set;} = false;
 
+        // Event for when the WebRTC connection connects
+        public event EventHandler OnConnect;
+
+        // Event for when the WebRTC connection closes
+        public event EventHandler OnClose;
+
         // Callback for receiving audio from the peer connection
         public delegate void TxAudioCallback(IPEndPoint rep, SDPMediaTypesEnum media, RTPPacket rtpPkt);
         public TxAudioCallback TxCallback;
+
+        public WebRTC()
+        {
+            // Create RX encoders
+            RxEncoder = new AudioEncoder();
+            RecRxEncoder = new AudioEncoder();
+
+            // Create TX encoders if we aren't RX only
+            if (!RxOnly)
+            {
+                TxEncoder = new AudioEncoder();
+                RecTxEncoder = new AudioEncoder();
+            }
+        }
 
         /// <summary>
         /// Callback used to send audio samples to the peer connection
@@ -84,54 +104,48 @@ namespace rc2_core
             }
         }
 
+        /// <summary>
+        /// Create a new peer connection to a WebRTC endpoint and configure the audio tracks
+        /// </summary>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
         public Task<RTCPeerConnection> CreatePeerConnection()
         {
-            Log.Debug("New client connected to RTC endpoint, creating peer connection");
+            Log.Logger.Debug("New client connected to RTC endpoint, creating peer connection");
+            
             // Create RTC configuration and peer connection
             RTCConfiguration config = new RTCConfiguration
             {
             };
             pc = new RTCPeerConnection(config);
 
-            // Base RX audio setup
-            RxEncoder = new AudioEncoder();
-            RecRxEncoder = new AudioEncoder();
-
-            // Base TX audio setup
-            if (!RxOnly)
-            {
-                TxEncoder = new AudioEncoder();
-                RecTxEncoder = new AudioEncoder();
-            }
-            else
-            {
-                Log.Warning("RX only radio defined, skipping TX audio setup");
-            }
-            
-            Log.Debug("Created base audio encoders");
-
-            Log.Verbose("Client supported formats:");
+            // Debug print of supported audio formats
+            Log.Logger.Verbose("Client supported formats:");
             foreach (var format in RxEncoder.SupportedFormats)
             {
-                Log.Verbose("{FormatName}", format.FormatName);
+                Log.Logger.Verbose("{FormatName}", format.FormatName);
             }
 
-            // Add the RX track to the peer connection
+            // Make sure we support the desired codec
             if (!RxEncoder.SupportedFormats.Any(f => f.FormatName == Codec))
             {
-                Log.Error("Specified format {SpecFormat} not supported by audio encoder!", Codec);
+                Log.Logger.Error("Specified format {SpecFormat} not supported by audio encoder!", Codec);
                 throw new ArgumentException("Invalid codec specified!");
             }
+
+            // Set send-only or send-recieve mode based on whether we're RX only or not
             if (!RxOnly)
             {
                 RtcTrack = new MediaStreamTrack(RxEncoder.SupportedFormats.Find(f => f.FormatName == Codec), MediaStreamStatusEnum.SendRecv);
-                Log.Debug("Added send/recv audio track to peer connection");
+                Log.Logger.Debug("Added send/recv audio track to peer connection");
             } 
             else
             {
                 RtcTrack = new MediaStreamTrack(RxEncoder.SupportedFormats.Find(f => f.FormatName == Codec), MediaStreamStatusEnum.SendOnly);
-                Log.Debug("Added send-only audio track to peer connection");
+                Log.Logger.Debug("Added send-only audio track to peer connection");
             }
+
+            // Add the RX track to the peer connection
             pc.addTrack(RtcTrack);
 
             // Audio format negotiation callback
@@ -141,14 +155,14 @@ namespace rc2_core
                 RxFormat = formats.Find(f => f.FormatName == Codec);
                 // Set the source to use the format
                 //RxSource.SetAudioSourceFormat(RxFormat);
-                Log.Debug("Negotiated RX audio format {AudioFormat} ({ClockRate}/{Chs})", RxFormat.FormatName, RxFormat.ClockRate, RxFormat.ChannelCount);
+                Log.Logger.Debug("Negotiated RX audio format {AudioFormat} ({ClockRate}/{Chs})", RxFormat.FormatName, RxFormat.ClockRate, RxFormat.ChannelCount);
                 // Set our wave and buffer writers to the proper sample rate
                 recFormat = new WaveFormat(RxFormat.ClockRate, 16, 1);
                 if (!RxOnly)
                 {
                     TxFormat = formats.Find(f => f.FormatName == Codec);
                     //TxEndpoint.SetAudioSinkFormat(TxFormat);
-                    Log.Debug("Negotiated TX audio format {AudioFormat} ({ClockRate}/{Chs})", TxFormat.FormatName, TxFormat.ClockRate, TxFormat.ChannelCount);
+                    Log.Logger.Debug("Negotiated TX audio format {AudioFormat} ({ClockRate}/{Chs})", TxFormat.FormatName, TxFormat.ClockRate, TxFormat.ChannelCount);
                 }
             };
 
@@ -156,15 +170,15 @@ namespace rc2_core
             pc.onconnectionstatechange += ConnectionStateChange;
 
             // Debug Stuff
-            pc.OnReceiveReport += (re, media, rr) => Log.Verbose("RTCP report received {Media} from {RE}\n{Report}", media, re, rr.GetDebugSummary());
-            pc.OnSendReport += (media, sr) => Log.Verbose("RTCP report sent for {Media}\n{Summary}", media, sr.GetDebugSummary());
+            pc.OnReceiveReport += (re, media, rr) => Log.Logger.Verbose("RTCP report received {Media} from {RE}\n{Report}", media, re, rr.GetDebugSummary());
+            pc.OnSendReport += (media, sr) => Log.Logger.Verbose("RTCP report sent for {Media}\n{Summary}", media, sr.GetDebugSummary());
             pc.GetRtpChannel().OnStunMessageSent += (msg, ep, isRelay) =>
             {
-                Log.Verbose("STUN {MessageType} sent to {Endpoint}.", msg.Header.MessageType, ep);
+                Log.Logger.Verbose("STUN {MessageType} sent to {Endpoint}.", msg.Header.MessageType, ep);
             };
             pc.GetRtpChannel().OnStunMessageReceived += (msg, ep, isRelay) =>
             {
-                Log.Verbose("STUN {MessageType} received from {Endpoint}.", msg.Header.MessageType, ep);
+                Log.Logger.Verbose("STUN {MessageType} received from {Endpoint}.", msg.Header.MessageType, ep);
                 //Log.Verbose(msg.ToString());
             };
             pc.oniceconnectionstatechange += (state) => Log.Verbose("ICE connection state change to {ICEState}.", state);
@@ -208,40 +222,44 @@ namespace rc2_core
         /// <param name="state">the new connection state</param>
         private async void ConnectionStateChange(RTCPeerConnectionState state)
         {
-            Log.Information("Peer connection state change to {PCState}.", state);
+            Log.Logger.Information("Peer connection state change to {PCState}.", state);
 
             if (state == RTCPeerConnectionState.failed)
             {
-                Log.Error("Peer connection failed");
-                Log.Debug("Closing peer connection");
+                Log.Logger.Error("Peer connection failed");
+                Log.Logger.Debug("Closing peer connection");
                 pc.Close("Connection failed");
             }
             else if (state == RTCPeerConnectionState.closed)
             {
-                Log.Debug("Closing audio");
-                await CloseAudio();
+                Log.Logger.Debug("WebRTC connection closed");
+                if (OnClose != null)
+                {
+                    OnClose(this, EventArgs.Empty);
+                }
             }
             else if (state == RTCPeerConnectionState.connected)
             {
-                Log.Debug("Starting audio");
-                await StartAudio();
+                Log.Logger.Debug("WebRTC connection opened");
+                if (OnConnect != null)
+                {
+                    OnConnect(this, EventArgs.Empty);
+                }
             }
         }
 
         public void Stop(string reason)
         {
-            Log.Warning("Stopping WebRTC with reason {Reason}", reason);
-            pc.Close(reason);
-        }
-
-        private async Task StartAudio()
-        {
-            Log.Debug("WebRTC audio started");
-        }
-
-        private async Task CloseAudio()
-        {
-            Log.Debug("WebRTC audio stopped");
+            Log.Logger.Warning("Stopping WebRTC with reason {Reason}", reason);
+            if (pc != null)
+            {
+                pc.Close(reason);
+                Log.Logger.Information($"Closed WebRTC peer connection to {pc.AudioDestinationEndPoint.ToString()}");
+            }
+            else
+            {
+                Log.Logger.Debug("No WebRTC peer connections to close");
+            }
         }
 
         /// <summary>
@@ -250,14 +268,19 @@ namespace rc2_core
         /// <param name="prefix">filename prefix, appended with timestamp</param>
         public void RecStartTx(string name)
         {
-            // Only create a new file if recording is enabled
+            // Stop recording RX
+            if (RecRxInProgress)
+            {
+                RecStop();
+            }
+            // Only create a new file if recording is enabled and we're not already recording TX
             if (Record && !RecTxInProgress)
             {
                 // Get full filepath
                 string filename = $"{RecPath}/{DateTime.Now.ToString(RecTsFmt)}_{name.Replace(' ', '_')}_TX.wav";
                 // Create writer
                 recTxWriter = new WaveFileWriter(filename, recFormat);
-                Log.Debug("Starting new TX recording: {file}", filename);
+                Log.Logger.Debug("Starting new TX recording: {file}", filename);
                 // Set Flag
                 RecTxInProgress = true;
             }
@@ -265,14 +288,19 @@ namespace rc2_core
 
         public void RecStartRx(string name)
         {
-            // Only create a new file if recording is enabled
+            // Stop recording TX
+            if (RecTxInProgress)
+            {
+                RecStop();
+            }
+            // Only create a new file if recording is enabled and we're not already recording RX
             if (Record && !RecRxInProgress)
             {
                 // Get full filepath
                 string filename = $"{RecPath}/{DateTime.Now.ToString(RecTsFmt)}_{name.Replace(' ', '_')}_RX.wav";
                 // Create writer
                 recRxWriter = new WaveFileWriter(filename, recFormat);
-                Log.Debug("Starting new RX recording: {file}", filename);
+                Log.Logger.Debug("Starting new RX recording: {file}", filename);
                 // Set Flag
                 RecRxInProgress = true;
             }
@@ -295,7 +323,7 @@ namespace rc2_core
             }
             RecTxInProgress = false;
             RecRxInProgress = false;
-            Log.Debug("Stopped recording");
+            Log.Logger.Debug("Stopped recording");
         }
 
         public void SetRecGains(double rxGainDb, double txGainDb)
