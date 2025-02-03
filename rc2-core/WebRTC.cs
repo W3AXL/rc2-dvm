@@ -1,8 +1,6 @@
 ﻿using Serilog;
 using SIPSorcery.Net;
 using SIPSorcery.Media;
-using SIPSorceryMedia.SDL2;
-using SIPSorceryMedia.FFmpeg;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -53,6 +51,10 @@ namespace rc2_core
 
         // Flag whether our radio is RX only
         public bool RxOnly {get; set;} = false;
+
+        // Callback for receiving audio from the peer connection
+        public delegate void TxAudioCallback(IPEndPoint rep, SDPMediaTypesEnum media, RTPPacket rtpPkt);
+        public TxAudioCallback TxCallback;
 
         /// <summary>
         /// Callback used to send audio samples to the peer connection
@@ -138,14 +140,14 @@ namespace rc2_core
                 // Get the format
                 RxFormat = formats.Find(f => f.FormatName == Codec);
                 // Set the source to use the format
-                RxSource.SetAudioSourceFormat(RxFormat);
+                //RxSource.SetAudioSourceFormat(RxFormat);
                 Log.Debug("Negotiated RX audio format {AudioFormat} ({ClockRate}/{Chs})", RxFormat.FormatName, RxFormat.ClockRate, RxFormat.ChannelCount);
                 // Set our wave and buffer writers to the proper sample rate
                 recFormat = new WaveFormat(RxFormat.ClockRate, 16, 1);
                 if (!RxOnly)
                 {
                     TxFormat = formats.Find(f => f.FormatName == Codec);
-                    TxEndpoint.SetAudioSinkFormat(TxFormat);
+                    //TxEndpoint.SetAudioSinkFormat(TxFormat);
                     Log.Debug("Negotiated TX audio format {AudioFormat} ({ClockRate}/{Chs})", TxFormat.FormatName, TxFormat.ClockRate, TxFormat.ChannelCount);
                 }
             };
@@ -173,16 +175,11 @@ namespace rc2_core
                 if (media == SDPMediaTypesEnum.audio)
                 {
                     //Log.Verbose("Got RTP audio from {Endpoint} - ({length}-byte payload)", rep.ToString(), rtpPkt.Payload.Length);
-                    if (!RxOnly)
-                        TxEndpoint.GotAudioRtp(
-                            rep, 
-                            rtpPkt.Header.SyncSource, 
-                            rtpPkt.Header.SequenceNumber, 
-                            rtpPkt.Header.Timestamp, 
-                            rtpPkt.Header.PayloadType, 
-                            rtpPkt.Header.MarkerBit == 1,
-                            rtpPkt.Payload
-                        );
+                    if (!RxOnly && TxCallback != null)
+                    {
+                        TxCallback(rep, media, rtpPkt);
+                    }
+                        
                     // Save TX audio to file, if we're supposed to and the file is open
                     if (Record && recTxWriter != null)
                     {
@@ -239,21 +236,12 @@ namespace rc2_core
 
         private async Task StartAudio()
         {
-            await RxSource.StartAudio();
-            if (!RxOnly)
-                await TxEndpoint.StartAudioSink();
-            Log.Debug("Audio started");
+            Log.Debug("WebRTC audio started");
         }
 
         private async Task CloseAudio()
         {
-            // Close audio
-            await RxSource.CloseAudio();
-            if (!RxOnly)
-                await TxEndpoint.CloseAudioSink();
-            // De-init SDL2
-            SDL2Helper.QuitSDL();
-            Log.Debug("SDL2 audio closed");
+            Log.Debug("WebRTC audio stopped");
         }
 
         /// <summary>
