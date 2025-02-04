@@ -60,10 +60,15 @@ namespace rc2_core
             wss.Start();
         }
 
-        public void Stop(string reason = "")
+        public void StopRTC(string reason)
         {
-            wss.Stop();
             rtc.Stop(reason);
+        }
+
+        public void Stop(string reason)
+        {
+            rtc.Stop(reason);
+            wss.Stop();
         }
 
         public void SendRadioStatus()
@@ -102,6 +107,12 @@ namespace rc2_core
         public void RecordStop()
         {
             rtc.RecStop();
+        }
+
+        // WebRTC audio functions
+        public void RxSendPCM16Samples(short[] samples, uint samplerate)
+        {
+            rtc.RxAudioCallback16(samples, samplerate);
         }
     }
 
@@ -199,8 +210,7 @@ namespace rc2_core
         protected override void OnClose(CloseEventArgs e)
         {
             Serilog.Log.Warning("Websocket connection closed: {args}", e.Reason);
-            server.Stop("Websocket closed");
-            //DaemonWebsocket.radio.Stop();
+            server.StopRTC("Websocket closed");
         }
 
         protected override void OnError(WebSocketSharp.ErrorEventArgs e)

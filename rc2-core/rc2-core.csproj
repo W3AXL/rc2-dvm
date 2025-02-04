@@ -14,6 +14,7 @@
     <PackageReference Include="SIPSorcery" Version="8.0.7" />
     <PackageReference Include="SIPSorcery.WebSocketSharp" Version="0.0.1" />
     <PackageReference Include="SIPSorceryMedia.Abstractions" Version="8.0.7" />
+    <PackageReference Include="SIPSorceryMedia.Encoders" Version="8.0.7" />
   </ItemGroup>
 
 </Project>

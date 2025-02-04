@@ -245,7 +245,7 @@ namespace rc2_core
         {
             Log.Logger.Information($"Stopping radio {name}");
             // Stop the server
-            server.Stop();
+            server.Stop("Radio instance stopped");
         }
 
         /// <summary>
@@ -366,6 +366,15 @@ namespace rc2_core
             {
                 server.RecordStop();
             }
+        }
+
+        /// <summary>
+        /// Send PCM16 samples to the WebRTC connection for encoding and transmission to the console
+        /// </summary>
+        /// <param name="samples">array of PCM16 samples</param>
+        public void RxSendPCM16Samples(short[] samples, uint samplerate)
+        {
+            server.RxSendPCM16Samples(samples, samplerate);
         }
     }
 }

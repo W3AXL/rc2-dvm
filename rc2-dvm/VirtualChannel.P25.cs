@@ -298,9 +298,14 @@ namespace rc2_dvm
                             gainControl.Read(pcm, 0, pcm.Length);
                         }
 
-                        // Log.Logger.Debug($"PCM BYTE BUFFER {FneUtils.HexDump(pcm)}");
-                        
-                        // TODO: Send decoded audio to WebRTC audio stream
+                        //Log.Logger.Debug($"PCM BYTE BUFFER {FneUtils.HexDump(pcm)}");
+
+                        // Convert back to short
+                        short[] pcm16 = new short[samples.Length];
+                        Buffer.BlockCopy(pcm, 0, pcm16, 0, pcm.Length);
+
+                        // Send
+                        dvmRadio.RxSendPCM16Samples(pcm16, FneSystemBase.SAMPLE_RATE);
                     }
                 }
             }
@@ -333,6 +338,10 @@ namespace rc2_dvm
                 callInProgress = true;
                 callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
                 status[FneSystemBase.P25_FIXED_SLOT].RxStart = pktTime;
+                // Update status
+                dvmRadio.Status.State = rc2_core.RadioState.Receiving;
+                dvmRadio.StatusCallback();
+                // Log
                 Log.Logger.Information($"({Config.Name}) P25D: Traffic *CALL START     * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} [STREAM ID {e.StreamId}]");
             }
 
@@ -342,6 +351,10 @@ namespace rc2_dvm
                 callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
                 callInProgress = false;
                 TimeSpan callDuration = pktTime - status[FneSystemBase.P25_FIXED_SLOT].RxStart;
+                // Update status
+                dvmRadio.Status.State = rc2_core.RadioState.Idle;
+                dvmRadio.StatusCallback();
+                // Log
                 Log.Logger.Information($"({Config.Name}) P25D: Traffic *CALL END       * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} DUR {callDuration} [STREAM ID {e.StreamId}]");
                 return;
             }

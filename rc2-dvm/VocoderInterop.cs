@@ -16,10 +16,10 @@ namespace rc2_dvm
     /// Using info from https://stackoverflow.com/a/315064/1842613
     public class MBEEncoder
     {
-        public enum MBE_ENCODER_MODE
+        public enum MBE_ENCODER_MODE : int
         {
-            ENCODE_DMR_AMBE,    //! DMR AMBE
-            ENCODE_88BIT_IMBE,  //! 88-bit IMBE (P25)
+            ENCODE_DMR_AMBE = 0,    //! DMR AMBE
+            ENCODE_88BIT_IMBE = 1,  //! 88-bit IMBE (P25)
         };
 
         /// <summary>
@@ -82,10 +82,10 @@ namespace rc2_dvm
     /// </summary>
     public class MBEDecoder
     {
-        public enum MBE_DECODER_MODE
+        public enum MBE_DECODER_MODE : int
         {
-            DECODE_DMR_AMBE,    //! DMR AMBE
-            DECODE_88BIT_IMBE   //! 88-bit IMBE (P25)
+            DECODE_DMR_AMBE = 0,    //! DMR AMBE
+            DECODE_88BIT_IMBE = 1   //! 88-bit IMBE (P25)
         };
 
         /// <summary>

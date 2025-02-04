@@ -77,17 +77,24 @@ namespace rc2_core
         }
 
         /// <summary>
-        /// Callback used to send audio samples to the peer connection
+        /// Callback used to send pre-encoded audio samples to the peer connection
         /// </summary>
         /// <param name="durationRtpUnits"></param>
         /// <param name="encodedSamples"></param>
         public void RxAudioCallback(uint durationRtpUnits, byte[] encodedSamples)
         {
-            // Send data to the peer connection if connected
-            if (pc != null)
+            // If we don't have a peer connection, return
+            if (pc == null || RxFormat.RtpClockRate == 0)
             {
-                pc.SendAudio(durationRtpUnits, encodedSamples);
+                Log.Logger.Debug($"Ignoring RX samples, WebRTC peer not connected");
+                return;
             }
+            
+            // Send audio
+            pc.SendAudio(durationRtpUnits, encodedSamples);
+
+            //Log.Logger.Debug($"Sent {encodedSamples.Length} ({durationRtpUnits * 1000 / RxFormat.RtpClockRate} ms) {RxFormat.Codec.ToString()} samples to WebRTC peer");
+            
             // Record audio if enabled
             if (Record && recRxWriter != null)
             {
@@ -102,6 +109,30 @@ namespace rc2_core
                 // Add to buffer
                 recRxWriter.WriteSamples(s16Samples, 0, s16Samples.Length);
             }
+        }
+
+        /// <summary>
+        /// Callback used to send PCM16 samples to the peer connection
+        /// </summary>
+        /// <param name="durationRtpUnits"></param>
+        /// <param name="pcm16Samples"></param>
+        public void RxAudioCallback16(short[] pcm16Samples, uint pcmSampleRate)
+        {
+            // If we don't have a peer connection, return
+            if (pc == null || RxFormat.RtpClockRate == 0)
+            {
+                Log.Logger.Debug($"Ignoring RX samples, WebRTC peer not connected");
+                return;
+            }
+
+            // Resample
+            short[] resampled = RxEncoder.Resample(pcm16Samples, (int)pcmSampleRate, RxFormat.ClockRate);
+            
+            // Encode the audio samples from PCM16 into the configured format
+            byte[] encodedSamples = RxEncoder.EncodeAudio(resampled, RxFormat);
+
+            // Send
+            this.RxAudioCallback((uint)encodedSamples.Length, encodedSamples);
         }
 
         /// <summary>
@@ -253,8 +284,9 @@ namespace rc2_core
             Log.Logger.Warning("Stopping WebRTC with reason {Reason}", reason);
             if (pc != null)
             {
+                //Log.Logger.Information($"Closing WebRTC peer connection to {pc.AudioDestinationEndPoint.ToString()}");
                 pc.Close(reason);
-                Log.Logger.Information($"Closed WebRTC peer connection to {pc.AudioDestinationEndPoint.ToString()}");
+                pc = null;
             }
             else
             {

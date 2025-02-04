@@ -26,7 +26,7 @@ namespace rc2_dvm
         private MBEEncoder encoder;
         private MBEDecoder decoder;
 
-        private WaveFormat waveFormat;
+        private WaveFormat waveFormat = new WaveFormat(FneSystemBase.SAMPLE_RATE, FneSystemBase.BITS_PER_SECOND, 1);
 
         private bool callInProgress = false;
 
@@ -137,6 +137,10 @@ namespace rc2_dvm
             else
             {
                 currentTgIdx++;
+                Log.Logger.Debug($"({Config.Name}) Selected TG {CurrentTalkgroup.Name}");
+                dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
+                dvmRadio.Status.State = RadioState.Idle;
+                dvmRadio.StatusCallback();
                 return true;
             }
         }
@@ -150,6 +154,10 @@ namespace rc2_dvm
             if (currentTgIdx > 0)
             {
                 currentTgIdx--;
+                Log.Logger.Debug($"({Config.Name}) Selected TG {CurrentTalkgroup.Name}");
+                dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
+                dvmRadio.Status.State = RadioState.Idle;
+                dvmRadio.StatusCallback();
                 return true;
             }
             else { return false; }
