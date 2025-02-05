@@ -1,5 +1,6 @@
 ﻿using fnecore;
 using fnecore.DMR;
+using fnecore.P25;
 using NAudio.Wave;
 using Serilog;
 using System;
@@ -141,7 +142,7 @@ namespace rc2_dvm
                 currentTgIdx++;
                 Log.Logger.Debug($"({Config.Name}) Selected TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
                 dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
-                dvmRadio.Status.State = RadioState.Idle;
+                resetCall();
                 dvmRadio.StatusCallback();
                 return true;
             }
@@ -158,16 +159,19 @@ namespace rc2_dvm
                 currentTgIdx--;
                 Log.Logger.Debug($"({Config.Name}) Selected TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
                 dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
-                dvmRadio.Status.State = RadioState.Idle;
+                resetCall();
                 dvmRadio.StatusCallback();
                 return true;
             }
             else { return false; }
         }
 
-        private void UpdateStatus()
+        private void resetCall()
         {
-
+            dvmRadio.Status.State = RadioState.Idle;
+            ignoreCall = false;
+            callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
+            callInProgress = false;
         }
 
         /// <summary>

@@ -402,3 +402,6 @@ FodyWeavers.xsd
 # Output Folders
 out/
 *.dll
+
+# Non-example config files
+config.yml

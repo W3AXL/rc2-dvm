@@ -72,7 +72,7 @@ virtualChannels:
     # Vocoder Audio Configuration
     audioConfig:
         # Post-vocoder RX audio gain
-        rxAudioGain: 0.5
+        rxAudioGain: 1.0
         # Vocoder RX audio gain (not used for external vocoders)
         rxVocoderGain: 3.0
         # Vocoder AGC enabled (not used for external vocoders)

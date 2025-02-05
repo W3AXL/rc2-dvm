@@ -275,39 +275,42 @@ namespace rc2_dvm
 #endif
                     if (samples != null)
                     {
-                        Log.Logger.Debug($"({Config.Name}) P25D: Traffic *VOICE FRAME    * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} VC{n} ERRS {errs} [STREAM ID {e.StreamId}]");
+                        //Log.Logger.Debug($"({Config.Name}) P25D: Traffic *VOICE FRAME    * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} VC{n} ERRS {errs} [STREAM ID {e.StreamId}]");
                         //Log.Logger.Debug($"IMBE {FneUtils.HexDump(imbe)}");
                         //Log.Logger.Debug($"SAMPLE BUFFER {FneUtils.HexDump(samples)}");
 
-                        int pcmIdx = 0;
-                        byte[] pcm = new byte[samples.Length * 2];
-
-                        for (int smpIdx = 0; smpIdx < samples.Length; smpIdx++)
-                        {
-                            pcm[pcmIdx + 0] = (byte)(samples[smpIdx] & 0xFF);
-                            pcm[pcmIdx + 1] = (byte)((samples[smpIdx] >> 8) & 0xFF);
-                            pcmIdx += 2;
-                        }
-
                         // post-process: apply gain to decoded audio frames
+                        // TODO: make this more efficient
                         if (Config.AudioConfig.RxAudioGain != 1.0f)
                         {
+                            // Convert to byte array
+                            int pcmIdx = 0;
+                            byte[] pcm = new byte[samples.Length * 2];
+
+                            for (int smpIdx = 0; smpIdx < samples.Length; smpIdx++)
+                            {
+                                pcm[pcmIdx + 0] = (byte)(samples[smpIdx] & 0xFF);
+                                pcm[pcmIdx + 1] = (byte)((samples[smpIdx] >> 8) & 0xFF);
+                                pcmIdx += 2;
+                            }
+
                             BufferedWaveProvider buffer = new BufferedWaveProvider(waveFormat);
                             buffer.AddSamples(pcm, 0, pcm.Length);
 
                             VolumeWaveProvider16 gainControl = new VolumeWaveProvider16(buffer);
                             gainControl.Volume = Config.AudioConfig.RxAudioGain;
                             gainControl.Read(pcm, 0, pcm.Length);
+
+                            // Convert back to short
+                            short[] pcm16 = new short[samples.Length];
+                            Buffer.BlockCopy(pcm, 0, pcm16, 0, pcm.Length);
+                            dvmRadio.RxSendPCM16Samples(pcm16, FneSystemBase.SAMPLE_RATE);
                         }
-
-                        //Log.Logger.Debug($"PCM BYTE BUFFER {FneUtils.HexDump(pcm)}");
-
-                        // Convert back to short
-                        short[] pcm16 = new short[samples.Length];
-                        Buffer.BlockCopy(pcm, 0, pcm16, 0, pcm.Length);
-
-                        // Send
-                        dvmRadio.RxSendPCM16Samples(pcm16, FneSystemBase.SAMPLE_RATE);
+                        else
+                        {
+                            dvmRadio.RxSendPCM16Samples(samples, FneSystemBase.SAMPLE_RATE);
+                        }
+                        
                     }
                 }
             }
@@ -334,6 +337,9 @@ namespace rc2_dvm
             for (int i = 24; i < len; i++)
                 data[i - 24] = e.Data[i];
 
+            // If we got data from the main runtime, then we should be receiving
+
+
             // is this a new call stream?
             if (e.StreamId != status[FneSystemBase.P25_FIXED_SLOT].RxStreamId && ((e.DUID != P25DUID.TDU) && (e.DUID != P25DUID.TDULC)))
             {
@@ -347,6 +353,7 @@ namespace rc2_dvm
                 Log.Logger.Information($"({Config.Name}) P25D: Traffic *CALL START     * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} [STREAM ID {e.StreamId}]");
             }
 
+            // Is the call over?
             if (((e.DUID == P25DUID.TDU) || (e.DUID == P25DUID.TDULC)) && (status[FneSystemBase.P25_FIXED_SLOT].RxType != FrameType.TERMINATOR))
             {
                 ignoreCall = false;
@@ -389,6 +396,19 @@ namespace rc2_dvm
 
                 ignoreCall = true;
                 return;
+            }
+
+            // At this point we chan check for late entry
+            if (!ignoreCall && !callInProgress)
+            {
+                callInProgress = true;
+                callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
+                status[FneSystemBase.P25_FIXED_SLOT].RxStart = pktTime;
+                // Update status
+                dvmRadio.Status.State = rc2_core.RadioState.Receiving;
+                dvmRadio.StatusCallback();
+                // Log
+                Log.Logger.Information($"({Config.Name}) P25D: Traffic *CALL LATE START* PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} [STREAM ID {e.StreamId}]");
             }
 
             int count = 0;
