@@ -12,10 +12,10 @@ namespace rc2_dvm
     /// <summary>
     /// Valid modes for audio vocoding
     /// </summary>
-    public enum VocoderMode : int
+    public enum VocoderMode
     {
-        DMR,
-        P25
+        DMR = 1,
+        P25 = 2,
     }
     
     /// <summary>

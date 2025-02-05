@@ -189,14 +189,14 @@ namespace rc2_dvm
             // Log.Logger.Debug($"SAMPLE BUFFER {FneUtils.HexDump(samples)}");
 
             // encode PCM samples into AMBE codewords
-            byte[] ambe = null;
+            byte[] ambe = new byte[FneSystemBase.AMBE_BUF_LEN];
 #if WIN32
             if (extHalfRateVocoder != null)
                 extHalfRateVocoder.encode(samples, out ambe, true);
             else
                 encoder.encode(samples, out ambe);
 #else
-            encoder.encode(samples, ref ambe);
+            encoder.encode(in samples, out ambe);
 #endif
             // Log.Logger.Debug($"AMBE {FneUtils.HexDump(ambe)}");
 
@@ -220,7 +220,7 @@ namespace rc2_dvm
                     for (int i = 0; i < FneSystemBase.AMBE_BUF_LEN; i++)
                         ambePartial[i] = ambe[i + (n * 9)];
 
-                    short[] samples = null;
+                    short[] samples = new short[FneSystemBase.MBE_SAMPLES_LENGTH];
                     int errs = 0;
 #if WIN32
                     if (extHalfRateVocoder != null)
@@ -228,7 +228,7 @@ namespace rc2_dvm
                     else
                         errs = decoder.decode(ambePartial, out samples);
 #else
-                    errs = decoder.decode(ambePartial, ref samples);
+                    errs = decoder.decode(ambePartial, samples);
 #endif
 
                     if (samples != null)

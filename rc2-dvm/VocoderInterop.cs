@@ -16,10 +16,10 @@ namespace rc2_dvm
     /// Using info from https://stackoverflow.com/a/315064/1842613
     public class MBEEncoder
     {
-        public enum MBE_ENCODER_MODE : int
+        public enum MBE_ENCODER_MODE
         {
-            ENCODE_DMR_AMBE = 0,    //! DMR AMBE
-            ENCODE_88BIT_IMBE = 1,  //! 88-bit IMBE (P25)
+            ENCODE_DMR_AMBE,    //! DMR AMBE
+            ENCODE_88BIT_IMBE,  //! 88-bit IMBE (P25)
         };
 
         /// <summary>
@@ -35,7 +35,7 @@ namespace rc2_dvm
         /// <param name="samples">Input PCM samples</param>
         /// <param name="codeword">Output MBE codeword</param>
         [DllImport("libvocoder", CallingConvention = CallingConvention.Cdecl)]
-        public static extern void MBEEncoder_Encode(IntPtr pEncoder, Int16[] samples, byte[] codeword);
+        public static extern void MBEEncoder_Encode(IntPtr pEncoder, in Int16[] samples, out byte[] codeword);
 
         /// <summary>
         /// Delete a created MBEEncoder
@@ -71,9 +71,9 @@ namespace rc2_dvm
         /// </summary>
         /// <param name="samples"></param>
         /// <param name="codeword"></param>
-        public void encode(Int16[] samples, ref byte[] codeword)
+        public void encode(in Int16[] samples, out byte[] codeword)
         {
-            MBEEncoder_Encode(encoder, samples, codeword);
+            MBEEncoder_Encode(encoder, in samples, out codeword);
         }
     }
 
@@ -82,10 +82,10 @@ namespace rc2_dvm
     /// </summary>
     public class MBEDecoder
     {
-        public enum MBE_DECODER_MODE : int
+        public enum MBE_DECODER_MODE
         {
-            DECODE_DMR_AMBE = 0,    //! DMR AMBE
-            DECODE_88BIT_IMBE = 1   //! 88-bit IMBE (P25)
+            DECODE_DMR_AMBE,    //! DMR AMBE
+            DECODE_88BIT_IMBE   //! 88-bit IMBE (P25)
         };
 
         /// <summary>
@@ -102,7 +102,7 @@ namespace rc2_dvm
         /// <param name="codeword">Output MBE codeword</param>
         /// <returns>Number of decode errors</returns>
         [DllImport("libvocoder", CallingConvention = CallingConvention.Cdecl)]
-        public static extern Int32 MBEDecoder_Decode(IntPtr pDecoder, byte[] codeword, Int16[] samples);
+        public static extern Int32 MBEDecoder_Decode(IntPtr pDecoder, [In] byte[] codeword, [Out] Int16[] samples);
 
         /// <summary>
         /// Delete a created MBEEncoder
@@ -138,7 +138,7 @@ namespace rc2_dvm
         /// </summary>
         /// <param name="samples"></param>
         /// <param name="codeword"></param>
-        public Int32 decode(byte[] codeword, ref Int16[] samples)
+        public Int32 decode([In] byte[] codeword, [Out] Int16[] samples)
         {
             return MBEDecoder_Decode(decoder, codeword, samples);
         }

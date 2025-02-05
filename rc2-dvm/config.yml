@@ -95,11 +95,11 @@ virtualChannels:
     #
     talkgroups:
         # Talkgroup Textual name
-      - name: NX-OPS
+      #- name: NX-OPS
         # Talkgroup ID
-        destinationId: 1501
+      #  destinationId: 1501
         # Talkgroup timeslot (only used for DMR talkgroups)
-        timeslot: 1
+      #  timeslot: 1
         # Talkgroup Textual name
       - name: NX-EVENT1
         # Talkgroup ID

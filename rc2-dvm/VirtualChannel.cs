@@ -64,11 +64,13 @@ namespace rc2_dvm
             // Instantiate the encoder/decoder pair based on the channel mode
             if (Config.Mode == VocoderMode.P25)
             {
+                Log.Logger.Debug("Creating new P25 decoder/encoder");
                 encoder = new MBEEncoder(MBEEncoder.MBE_ENCODER_MODE.ENCODE_88BIT_IMBE);
                 decoder = new MBEDecoder(MBEDecoder.MBE_DECODER_MODE.DECODE_88BIT_IMBE);
             }
             else
             {
+                Log.Logger.Debug("Creating new DMR decoder/encoder");
                 encoder = new MBEEncoder(MBEEncoder.MBE_ENCODER_MODE.ENCODE_DMR_AMBE);
                 decoder = new MBEDecoder(MBEDecoder.MBE_DECODER_MODE.DECODE_DMR_AMBE);
             }
@@ -137,7 +139,7 @@ namespace rc2_dvm
             else
             {
                 currentTgIdx++;
-                Log.Logger.Debug($"({Config.Name}) Selected TG {CurrentTalkgroup.Name}");
+                Log.Logger.Debug($"({Config.Name}) Selected TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
                 dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
                 dvmRadio.Status.State = RadioState.Idle;
                 dvmRadio.StatusCallback();
@@ -154,7 +156,7 @@ namespace rc2_dvm
             if (currentTgIdx > 0)
             {
                 currentTgIdx--;
-                Log.Logger.Debug($"({Config.Name}) Selected TG {CurrentTalkgroup.Name}");
+                Log.Logger.Debug($"({Config.Name}) Selected TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
                 dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
                 dvmRadio.Status.State = RadioState.Idle;
                 dvmRadio.StatusCallback();

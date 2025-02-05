@@ -75,14 +75,14 @@ namespace rc2_dvm
             // Log.Logger.Debug($"SAMPLE BUFFER {FneUtils.HexDump(samples)}");
 
             // encode PCM samples into IMBE codewords
-            byte[] imbe = null;
+            byte[] imbe = new byte[FneSystemBase.IMBE_BUF_LEN];
 #if WIN32
             if (extFullRateVocoder != null)
                 extFullRateVocoder.encode(samples, out imbe);
             else
                 encoder.encode(samples, out imbe);
 #else
-            encoder.encode(samples, ref imbe);
+            encoder.encode(in samples, out imbe);
 #endif
             // Log.Logger.Debug($"IMBE {FneUtils.HexDump(imbe)}");
 #if ENCODER_LOOPBACK_TEST
@@ -261,7 +261,9 @@ namespace rc2_dvm
                             break;
                     }
 
-                    short[] samples = new short[160];
+                    //Log.Logger.Debug($"Decoding IMBE buffer: {FneUtils.HexDump(imbe)}");
+
+                    short[] samples = new short[FneSystemBase.MBE_SAMPLES_LENGTH];
                     int errs = 0;
 #if WIN32
                     if (extFullRateVocoder != null)
@@ -269,13 +271,13 @@ namespace rc2_dvm
                     else
                         errs = decoder.decode(imbe, out samples);
 #else
-                    errs = decoder.decode(imbe, ref samples);
+                    errs = decoder.decode(imbe, samples);
 #endif
                     if (samples != null)
                     {
                         Log.Logger.Debug($"({Config.Name}) P25D: Traffic *VOICE FRAME    * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} VC{n} ERRS {errs} [STREAM ID {e.StreamId}]");
-                        // Log.Logger.Debug($"IMBE {FneUtils.HexDump(imbe)}");
-                        // Log.Logger.Debug($"SAMPLE BUFFER {FneUtils.HexDump(samples)}");
+                        //Log.Logger.Debug($"IMBE {FneUtils.HexDump(imbe)}");
+                        //Log.Logger.Debug($"SAMPLE BUFFER {FneUtils.HexDump(samples)}");
 
                         int pcmIdx = 0;
                         byte[] pcm = new byte[samples.Length * 2];
