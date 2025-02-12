@@ -20,13 +20,17 @@ jobs:
         os: [ubuntu-latest, windows-latest]
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.x
+        cache: true
     - name: Restore dependencies
-      run: dotnet restore
+      run: dotnet restore --locked-mode
     - name: Build
       run: dotnet build --no-restore
     - name: Publish
