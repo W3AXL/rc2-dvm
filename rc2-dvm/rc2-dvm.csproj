@@ -12,7 +12,7 @@
     <Description>RadioConsole2 DVM FNE Interface Daemon</Description>
     <Copyright>Copyright (c) 2025 Patrick McDonnell W3AXL</Copyright>
     <Product>RadioConsole2 DVM FNE Interface Daemon</Product>
-    <Platforms>AnyCPU;x64;x86</Platforms>
+    <Platforms>x86</Platforms>
     <PlatformTarget>x86</PlatformTarget>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
   </PropertyGroup>
