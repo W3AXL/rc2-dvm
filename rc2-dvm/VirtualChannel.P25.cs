@@ -9,6 +9,13 @@ using System.Net.Sockets;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
+using NAudio.Dsp;
+using NWaves;
+using System.ComponentModel;
+using NWaves.Filters;
+using NWaves.Filters.OnePole;
+using NAudio.Wave.SampleProviders;
+using NWaves.Signals;
 
 namespace rc2_dvm
 {
@@ -21,6 +28,8 @@ namespace rc2_dvm
 
         private bool ignoreCall = false;
         private byte callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
+
+        private static short[] silence = new short[FneSystemBase.MBE_SAMPLES_LENGTH];
 
         /// <summary>
         /// Helper to send a P25 terminator message
@@ -39,11 +48,17 @@ namespace rc2_dvm
         /// <summary>
         /// Helper to encode and transmit PCM audio as P25 IMBE frames.
         /// </summary>
-        /// <param name="pcm"></param>
+        /// <param name="pcm16"></param>
         /// <param name="forcedSrcId"></param>
         /// <param name="forcedDstId"></param>
-        private void P25EncodeAudioFrame(byte[] pcm, uint srcId, uint dstId)
+        private void P25EncodeAudioFrame(short[] pcm16, uint srcId, uint dstId)
         {
+            // Ensure samples are right length
+            if (pcm16.Length != FneSystemBase.MBE_SAMPLES_LENGTH)
+            {
+                throw new ArgumentException("Input samples not proper length for MBE encoding!");
+            }
+
             if (p25N > 17)
                 p25N = 0;
             if (p25N == 0)
@@ -53,38 +68,40 @@ namespace rc2_dvm
 
             // Log.Logger.Debug($"BYTE BUFFER {FneUtils.HexDump(pcm)}");
 
-            // pre-process: apply gain to PCM audio frames
-            if (Config.AudioConfig.TxAudioGain != 1.0f)
-            {
-                BufferedWaveProvider buffer = new BufferedWaveProvider(waveFormat);
-                buffer.AddSamples(pcm, 0, pcm.Length);
+            // Convert to floats
+            float[] fSamples = Utils.PcmToFloat(pcm16);
 
-                VolumeWaveProvider16 gainControl = new VolumeWaveProvider16(buffer);
-                gainControl.Volume = Config.AudioConfig.TxAudioGain;
-                gainControl.Read(pcm, 0, pcm.Length);
+            // Apply filter
+            DiscreteSignal signal = new DiscreteSignal(waveFormat.SampleRate, fSamples, true);
+            DiscreteSignal filtered = audioFilter.ApplyTo(signal);
+
+            // Apply Gain
+            filtered = filtered * Config.AudioConfig.TxAudioGain;
+
+            // Convert back to pcm16 samples
+            short[] filtered16 = Utils.FloatToPcm(filtered.Samples);
+
+            // TX local repeat
+            if (Config.AudioConfig.TxLocalRepeat)
+            {
+                byte[] pcm = new byte[filtered16.Length * 2];
+                Buffer.BlockCopy(filtered16, 0, pcm, 0, pcm.Length);
+                bufferedWaveProvider.AddSamples(pcm, 0, pcm.Length);
             }
 
-            int smpIdx = 0;
-            short[] samples = new short[FneSystemBase.MBE_SAMPLES_LENGTH];
-            for (int pcmIdx = 0; pcmIdx < pcm.Length; pcmIdx += 2)
-            {
-                samples[smpIdx] = (short)((pcm[pcmIdx + 1] << 8) + pcm[pcmIdx + 0]);
-                smpIdx++;
-            }
-
-            // Log.Logger.Debug($"SAMPLE BUFFER {FneUtils.HexDump(samples)}");
+            //Log.Logger.Debug($"SAMPLE BUFFER {FneUtils.HexDump(filtered16)}");
 
             // encode PCM samples into IMBE codewords
             byte[] imbe = new byte[FneSystemBase.IMBE_BUF_LEN];
 #if WIN32
             if (extFullRateVocoder != null)
-                extFullRateVocoder.encode(samples, out imbe);
+                extFullRateVocoder.encode(filtered16, out imbe);
             else
-                encoder.encode(samples, out imbe);
+                encoder.encode(filtered16, imbe);
 #else
-            encoder.encode(in samples, out imbe);
+            encoder.encode(filtered16, imbe);
 #endif
-            // Log.Logger.Debug($"IMBE {FneUtils.HexDump(imbe)}");
+            //Log.Logger.Debug($"IMBE {FneUtils.HexDump(imbe)}");
 #if ENCODER_LOOPBACK_TEST
             short[] samp2 = null;
             int errs = p25Decoder.decode(imbe, out samp2);
@@ -267,50 +284,33 @@ namespace rc2_dvm
                     int errs = 0;
 #if WIN32
                     if (extFullRateVocoder != null)
-                        errs = extFullRateVocoder.decode(imbe, out samples);
+                        errs = extFullRateVocoder.decode(imbe, samples);
                     else
-                        errs = decoder.decode(imbe, out samples);
+                        errs = decoder.decode(imbe, samples);
 #else
                     errs = decoder.decode(imbe, samples);
 #endif
                     if (samples != null)
                     {
-                        //Log.Logger.Debug($"({Config.Name}) P25D: Traffic *VOICE FRAME    * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} VC{n} ERRS {errs} [STREAM ID {e.StreamId}]");
+                        Log.Logger.Debug($"({Config.Name}) P25D: Traffic *VOICE FRAME    * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} VC{n} ERRS {errs} [STREAM ID {e.StreamId}]");
                         //Log.Logger.Debug($"IMBE {FneUtils.HexDump(imbe)}");
                         //Log.Logger.Debug($"SAMPLE BUFFER {FneUtils.HexDump(samples)}");
 
-                        // post-process: apply gain to decoded audio frames
-                        // TODO: make this more efficient
-                        if (Config.AudioConfig.RxAudioGain != 1.0f)
-                        {
-                            // Convert to byte array
-                            int pcmIdx = 0;
-                            byte[] pcm = new byte[samples.Length * 2];
+                        // Convert to floats
+                        float[] fSamples = Utils.PcmToFloat(samples);
 
-                            for (int smpIdx = 0; smpIdx < samples.Length; smpIdx++)
-                            {
-                                pcm[pcmIdx + 0] = (byte)(samples[smpIdx] & 0xFF);
-                                pcm[pcmIdx + 1] = (byte)((samples[smpIdx] >> 8) & 0xFF);
-                                pcmIdx += 2;
-                            }
+                        // Apply filter
+                        DiscreteSignal signal = new DiscreteSignal(waveFormat.SampleRate, fSamples, true);
+                        DiscreteSignal filtered = audioFilter.ApplyTo(signal);
 
-                            BufferedWaveProvider buffer = new BufferedWaveProvider(waveFormat);
-                            buffer.AddSamples(pcm, 0, pcm.Length);
+                        // Apply Gain
+                        filtered = filtered * Config.AudioConfig.RxAudioGain;
 
-                            VolumeWaveProvider16 gainControl = new VolumeWaveProvider16(buffer);
-                            gainControl.Volume = Config.AudioConfig.RxAudioGain;
-                            gainControl.Read(pcm, 0, pcm.Length);
+                        // Convert back to pcm16 samples
+                        short[] filtered16 = Utils.FloatToPcm(filtered.Samples);
 
-                            // Convert back to short
-                            short[] pcm16 = new short[samples.Length];
-                            Buffer.BlockCopy(pcm, 0, pcm16, 0, pcm.Length);
-                            dvmRadio.RxSendPCM16Samples(pcm16, FneSystemBase.SAMPLE_RATE);
-                        }
-                        else
-                        {
-                            dvmRadio.RxSendPCM16Samples(samples, FneSystemBase.SAMPLE_RATE);
-                        }
-                        
+                        // Send to WebRTC
+                        dvmRadio.RxSendPCM16Samples(filtered16, FneSystemBase.SAMPLE_RATE);
                     }
                 }
             }
@@ -336,9 +336,6 @@ namespace rc2_dvm
             byte[] data = new byte[len];
             for (int i = 24; i < len; i++)
                 data[i - 24] = e.Data[i];
-
-            // If we got data from the main runtime, then we should be receiving
-
 
             // is this a new call stream?
             if (e.StreamId != status[FneSystemBase.P25_FIXED_SLOT].RxStreamId && ((e.DUID != P25DUID.TDU) && (e.DUID != P25DUID.TDULC)))
@@ -393,6 +390,9 @@ namespace rc2_dvm
                     TimeSpan callDuration = pktTime - status[FneSystemBase.P25_FIXED_SLOT].RxStart;
                     Log.Logger.Information($"({Config.Name}) P25D: Traffic *CALL END (T)    * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} DUR {callDuration} [STREAM ID {e.StreamId}]");
                 }
+
+                // Send an extra block of silent PCM samples to prevent the weird artifacting at the end of calls
+                dvmRadio.RxSendPCM16Samples(silence, FneSystemBase.SAMPLE_RATE);
 
                 ignoreCall = true;
                 return;

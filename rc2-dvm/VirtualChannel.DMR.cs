@@ -194,9 +194,9 @@ namespace rc2_dvm
             if (extHalfRateVocoder != null)
                 extHalfRateVocoder.encode(samples, out ambe, true);
             else
-                encoder.encode(samples, out ambe);
+                encoder.encode(samples, ambe);
 #else
-            encoder.encode(in samples, out ambe);
+            encoder.encode(samples, ambe);
 #endif
             // Log.Logger.Debug($"AMBE {FneUtils.HexDump(ambe)}");
 
@@ -224,9 +224,9 @@ namespace rc2_dvm
                     int errs = 0;
 #if WIN32
                     if (extHalfRateVocoder != null)
-                        errs = extHalfRateVocoder.decode(ambePartial, out samples);
+                        errs = extHalfRateVocoder.decode(ambePartial, samples);
                     else
-                        errs = decoder.decode(ambePartial, out samples);
+                        errs = decoder.decode(ambePartial, samples);
 #else
                     errs = decoder.decode(ambePartial, samples);
 #endif

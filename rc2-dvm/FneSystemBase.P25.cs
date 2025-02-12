@@ -463,11 +463,26 @@ namespace rc2_dvm
                 if (e.SrcId == 0)
                     return;
 
+                // Terminators
                 if ((e.DUID == P25DUID.TDU) || (e.DUID == P25DUID.TDULC))
                 {
                     // ignore TDU's that are grant demands
                     if ((control & 0x80U) == 0x80U)
                         return;
+                    // Remove this from the active call list if present
+                    if (IsTalkgroupActive(e.DstId))
+                    {
+                        Log.Logger.Debug($"({RC2DVM.fneSystem.SystemName}) P25 {Enum.GetName(typeof(P25DUID), e.DUID)}, removing P25 TG {e.DstId} from list of active talkgroups");
+                        RemoveActiveTalkgroup(e.DstId);
+                    }
+                } else
+                {
+                    // Check if we need to add it to the list of active calls
+                    if (!IsTalkgroupActive(e.DstId))
+                    {
+                        Log.Logger.Debug($"({RC2DVM.fneSystem.SystemName}) P25 {Enum.GetName(typeof(P25DUID), e.DUID)}, adding P25 TG {e.DstId} to list of active talkgroups");
+                        AddActiveTalkgroup(e.DstId);
+                    }
                 }
 
                 // Find any channels which are currently on this talkgroup and send data to them

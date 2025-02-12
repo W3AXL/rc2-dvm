@@ -3,6 +3,8 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
+	<PublishSingleFile>true</PublishSingleFile>
+	<SelfContained>true</SelfContained>
     <RootNamespace>rc2_dvm</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -10,11 +12,37 @@
     <Description>RadioConsole2 DVM FNE Interface Daemon</Description>
     <Copyright>Copyright (c) 2025 Patrick McDonnell W3AXL</Copyright>
     <Product>RadioConsole2 DVM FNE Interface Daemon</Product>
-    <Platforms>AnyCPU;x64</Platforms>
+    <Platforms>AnyCPU;x64;x86</Platforms>
+    <PlatformTarget>x86</PlatformTarget>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutputPath>$(SolutionDir)\out\x64\Debug</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+	<RuntimeIdentifier>win-x86</RuntimeIdentifier>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutputPath>$(SolutionDir)\out\x64\Release</OutputPath>
+	<RuntimeIdentifier>win-x86</RuntimeIdentifier>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x86'">
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <OutputPath>$(SolutionDir)\out\x86\Debug</OutputPath>
+    <DefineConstants>TRACE;WIN32;</DefineConstants>
+	<RuntimeIdentifier>win-x86</RuntimeIdentifier>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x86'">
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <OutputPath>$(SolutionDir)\out\x86\Release</OutputPath>
+    <DefineConstants>WIN32;</DefineConstants>
+	<RuntimeIdentifier>win-x86</RuntimeIdentifier>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
+    <PackageReference Include="NWaves" Version="0.9.6" />
     <PackageReference Include="Serilog" Version="4.2.0" />
     <PackageReference Include="Serilog.Exceptions" Version="8.4.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
@@ -27,6 +55,12 @@
   <ItemGroup>
     <ProjectReference Include="..\fnecore\fnecore.csproj" />
     <ProjectReference Include="..\rc2-core\rc2-core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="AMBE.dll">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">

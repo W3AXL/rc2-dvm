@@ -1,6 +1,7 @@
 ﻿using Serilog;
 using Newtonsoft.Json;
 using System.Net;
+using SIPSorcery.Net;
 
 namespace rc2_core
 {
@@ -181,6 +182,8 @@ namespace rc2_core
         public delegate void Callback();
         public Callback StatusCallback { get; set; }
 
+        public Action<short[], int> TxAudioCallback;
+
         public int RecTimeout { get; set; } = 0;
 
         // RC2 server instance
@@ -198,7 +201,8 @@ namespace rc2_core
             IPAddress listenAddress, int listenPort,
             List<Softkey> softkeys = null,
             List<TextLookup> zoneLookups = null,
-            List<TextLookup> chanLookups = null )
+            List<TextLookup> chanLookups = null,
+            Action<short[]> txAudioCallback = null, int txAudioSampleRate = 8000)
         {
             // Log Print
             Log.Logger.Information($"Creating new RC2 radio {name} ({desc}) listening on {listenAddress}:{listenPort}");
@@ -208,7 +212,7 @@ namespace rc2_core
             this.desc = desc;
 
             // Create backend server
-            server = new RC2Server(listenAddress, listenPort, this);
+            server = new RC2Server(listenAddress, listenPort, this, txAudioCallback, txAudioSampleRate);
 
             // Create status and assign name & description
             Status = new RadioStatus();
@@ -376,5 +380,7 @@ namespace rc2_core
         {
             server.RxSendPCM16Samples(samples, samplerate);
         }
+
+
     }
 }

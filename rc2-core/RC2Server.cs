@@ -38,10 +38,10 @@ namespace rc2_core
             }
         }
 
-        public RC2Server(IPAddress address, int port, Radio _radio)
+        public RC2Server(IPAddress address, int port, Radio _radio, Action<short[]> txAudioCallback, int txAudioSampleRate)
         {
             wss = new WebSocketServer(address, port);
-            rtc = new WebRTC();
+            rtc = new WebRTC(txAudioCallback, txAudioSampleRate);
             radio = _radio;
             // Bind status callback
             radio.StatusCallback += SendRadioStatus;

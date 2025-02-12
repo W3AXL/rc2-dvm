@@ -59,6 +59,11 @@ namespace rc2_dvm
         public float TxAudioGain = 1.0f;
 
         public float TxVocoderGain = 3.0f;
+
+        /// <summary>
+        /// Whether to play TX audio through the local default speakers
+        /// </summary>
+        public bool TxLocalRepeat = false;
     }
 
     /// <summary>
@@ -73,7 +78,7 @@ namespace rc2_dvm
         /// <summary>
         /// Destination Timeslot
         /// </summary>
-        public uint Timeslot = 1;
+        public byte Timeslot = 1;
         /// <summary>
         /// Talkgroup Name
         /// </summary>
@@ -121,6 +126,10 @@ namespace rc2_dvm
         /// Whether this channel is RX-only or not (TX disabled)
         /// </summary>
         public bool RxOnly = false;
+        /// <summary>
+        /// Whether to send grant demands on call start
+        /// </summary>
+        public bool TxGrantDemands = false;
     }
 
     /// <summary>

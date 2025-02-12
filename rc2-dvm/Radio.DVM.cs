@@ -35,7 +35,8 @@ namespace rc2_dvm
         public DVMRadio(
             string name, bool rxOnly,
             IPAddress listenAddress, int listenPort,
-            List<TalkgroupConfigObject> talkgroups, VirtualChannel vChannel) : base(name, "", rxOnly, listenAddress, listenPort, DVMSoftkeys)
+            List<TalkgroupConfigObject> talkgroups, VirtualChannel vChannel, 
+            Action<short[]> txAudioCallback, int txAudioSampleRate) : base(name, "", rxOnly, listenAddress, listenPort, DVMSoftkeys, null, null, txAudioCallback, txAudioSampleRate)
         {
             this.talkgroups = talkgroups;
             this.vChannel = vChannel;
@@ -65,8 +66,14 @@ namespace rc2_dvm
         /// <returns></returns>
         public override bool SetTransmit(bool tx)
         {
-            // TODO: Implement trying to get a grant, etc
-            return false;
+            if (tx)
+            {
+                return vChannel.StartTransmit();
+            }
+            else
+            {
+                return vChannel.StopTransmit();
+            }
         }
 
         public override bool PressButton(SoftkeyName name)

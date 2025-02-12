@@ -12,6 +12,7 @@ using NAudio;
 using NAudio.Wave;
 using NAudio.Utils;
 using NAudio.Wave.SampleProviders;
+using Concentus;
 
 namespace rc2_core
 {
@@ -28,6 +29,9 @@ namespace rc2_core
         // We make separate encoders for recording since some codecs can be time-variant
         public AudioEncoder RecRxEncoder;
         private AudioEncoder RecTxEncoder;
+
+        // TX audio output samplerate
+        private int txAudioSamplerate;
 
         // Objects for TX/RX audio recording
         public bool Record = false;          // Whether or not recording to audio files is enabled
@@ -59,10 +63,9 @@ namespace rc2_core
         public event EventHandler OnClose;
 
         // Callback for receiving audio from the peer connection
-        public delegate void TxAudioCallback(IPEndPoint rep, SDPMediaTypesEnum media, RTPPacket rtpPkt);
-        public TxAudioCallback TxCallback;
+        private Action<short[]> TxCallback;
 
-        public WebRTC()
+        public WebRTC(Action<short[]> txCallback, int txSampleRate)
         {
             // Create RX encoders
             RxEncoder = new AudioEncoder();
@@ -73,6 +76,9 @@ namespace rc2_core
             {
                 TxEncoder = new AudioEncoder();
                 RecTxEncoder = new AudioEncoder();
+                // Bind tx audio callback
+                TxCallback = txCallback;
+                txAudioSamplerate = txSampleRate;
             }
         }
 
@@ -125,14 +131,41 @@ namespace rc2_core
                 return;
             }
 
-            // Resample
-            short[] resampled = RxEncoder.Resample(pcm16Samples, (int)pcmSampleRate, RxFormat.ClockRate);
-            
-            // Encode the audio samples from PCM16 into the configured format
-            byte[] encodedSamples = RxEncoder.EncodeAudio(resampled, RxFormat);
+            // Resample if needed
+            if (pcmSampleRate != RxFormat.ClockRate)
+            {
+                short[] resampled = RxEncoder.Resample(pcm16Samples, (int)pcmSampleRate, RxFormat.ClockRate);
+                byte[] encodedSamples = RxEncoder.EncodeAudio(resampled, RxFormat);
+                this.RxAudioCallback((uint)encodedSamples.Length, encodedSamples);
+            }
+            else
+            {
+                byte[] encodedSamples = RxEncoder.EncodeAudio(pcm16Samples, RxFormat);
+                this.RxAudioCallback((uint)encodedSamples.Length, encodedSamples);
+            }
+        }
 
-            // Send
-            this.RxAudioCallback((uint)encodedSamples.Length, encodedSamples);
+        /// <summary>
+        /// Decode RTP audio into PCM16 samples
+        /// </summary>
+        /// <param name="encodedSamples"></param>
+        /// <param name="pcm16Samples"></param>
+        /// <param name="pcmSampleRate"></param>
+        private void decodeTxAudio(byte[] encodedSamples)
+        {
+            // Decode
+            short[] pcm16Samples = TxEncoder.DecodeAudio(encodedSamples, TxFormat);
+
+            // Resample if needed
+            if (txAudioSamplerate != TxFormat.ClockRate)
+            {
+                short[] resampled = TxEncoder.Resample(pcm16Samples, TxFormat.ClockRate, txAudioSamplerate);
+                TxCallback(resampled);
+            }
+            else
+            {
+                TxCallback(pcm16Samples);
+            }
         }
 
         /// <summary>
@@ -220,9 +253,10 @@ namespace rc2_core
                 if (media == SDPMediaTypesEnum.audio)
                 {
                     //Log.Verbose("Got RTP audio from {Endpoint} - ({length}-byte payload)", rep.ToString(), rtpPkt.Payload.Length);
-                    if (!RxOnly && TxCallback != null)
+                    if (!RxOnly)
                     {
-                        TxCallback(rep, media, rtpPkt);
+                        //TxCallback(rep, media, rtpPkt);
+                        decodeTxAudio(rtpPkt.Payload);
                     }
                         
                     // Save TX audio to file, if we're supposed to and the file is open

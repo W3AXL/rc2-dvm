@@ -118,6 +118,9 @@ namespace rc2_dvm
 
         private Random rand;
 
+        // List of active calls
+        private List<(uint, byte)> activeTalkgroups = new List<(uint, byte)>();
+
         /*
         ** Methods
         */
@@ -191,5 +194,65 @@ namespace rc2_dvm
         {
             return;
         }
+
+        /// <summary>
+        /// Returns a new stream ID
+        /// </summary>
+        /// <returns></returns>
+        public uint NewStreamId()
+        {
+            return (uint)rand.Next(int.MinValue, int.MaxValue);
+        }
+
+        /// <summary>
+        /// Returns true if a tgid/timeslot combination is present in the list of active talkgroups
+        /// </summary>
+        /// <param name="tgid"></param>
+        /// <param name="slot"></param>
+        /// <returns></returns>
+        public bool IsTalkgroupActive(uint tgid, byte slot = 1)
+        {
+            int index = activeTalkgroups.FindIndex(tg => tg.Item1 == tgid && tg.Item2 == slot);
+            return index != -1;
+        }
+
+        /// <summary>
+        /// Add a TGID/Slot pair to the list of active talkgroups
+        /// </summary>
+        /// <param name="tgid"></param>
+        /// <param name="slot"></param>
+        /// <returns></returns>
+        public bool AddActiveTalkgroup(uint tgid, byte slot = 1)
+        {
+            if (!IsTalkgroupActive(tgid, slot))
+            {
+                activeTalkgroups.Add((tgid, slot));
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Remove a TGID/Slot pair from the list of active talkgroups
+        /// </summary>
+        /// <param name="tgid"></param>
+        /// <param name="slot"></param>
+        /// <returns></returns>
+        public bool RemoveActiveTalkgroup(uint tgid, byte slot = 1)
+        {
+            if (IsTalkgroupActive(tgid, slot))
+            {
+                return activeTalkgroups.Remove((tgid, slot));
+            }
+            else
+            {
+                Log.Logger.Debug("Tried to remove TG/Slot not present in active talkgroup list!");
+                return false;
+            }
+        }
+
     } // public abstract partial class FneSystemBase : fnecore.FneSystemBase
 }
