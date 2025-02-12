@@ -57,14 +57,4 @@
     <ProjectReference Include="..\rc2-core\rc2-core.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <None Update="AMBE.dll">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
-
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="copy &quot;$(SolutionDir)\rc2-dvm\libvocoder.dll&quot; &quot;$(TargetDir)\&quot;" />
-  </Target>
-
 </Project>
