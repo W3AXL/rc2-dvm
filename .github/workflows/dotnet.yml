@@ -28,4 +28,4 @@ jobs:
     - name: Build
       run: dotnet build --no-restore
     - name: Publish
-      run: dotnet publish -c Release -o "${{env.DOTNET_ROOT}}/rc2-dvm" -p:PublishSingleFile=true "rc2-dvm/rc2-dvm.csproj"
+      run: dotnet publish -c Release -o "${{env.DOTNET_ROOT}}/rc2-dvm" -p:PublishSingleFile=true -p:Platform="x86" "rc2-dvm/rc2-dvm.csproj"
