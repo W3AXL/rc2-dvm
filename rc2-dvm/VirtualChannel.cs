@@ -53,7 +53,10 @@ namespace rc2_dvm
         private BufferedWaveProvider bufferedWaveProvider;
 
         // Filter for audio
-        private NWaves.Filters.Butterworth.LowPassFilter audioFilter;
+        private NWaves.Filters.Butterworth.BandPassFilter audioFilter;
+
+        // MBE Tone Detector
+        private MBEToneDetector toneDetector;
 
         // Whether the channel is "scanning" (able to receive from any talkgroup)
         private bool scanning = false;
@@ -95,12 +98,22 @@ namespace rc2_dvm
             string path = Uri.UnescapeDataString(uri.Path);
             string ambePath = Path.Combine(new string[] { Path.GetDirectoryName(path), "AMBE.DLL" });
 
+            Log.Logger.Debug($"({Config.Name}) checking for external vocoder library at {ambePath}");
+
             if (File.Exists(ambePath))
             { 
                 externalAmbe = true;
-                Log.Logger.Information($"AMBE.DLL found, using external vocoder interop!");
             }
 #endif
+
+            if (externalAmbe)
+            {
+                Log.Logger.Information($"({Config.Name}) AMBE.DLL found, using external vocoder interop!");
+            }
+            else
+            {
+                Log.Logger.Information($"({Config.Name}) Using software MBE vocoder");
+            }
 
             // Instantiate the encoder/decoder pair based on the channel mode
             if (Config.Mode == VocoderMode.P25)
@@ -136,8 +149,12 @@ namespace rc2_dvm
             }
 
             // Init filter for audio
-            float cutoff = 2800f / (float)waveFormat.SampleRate;
-            audioFilter = new NWaves.Filters.Butterworth.LowPassFilter(cutoff, 8);
+            float high_cutoff = (float)Config.AudioConfig.AudioHighCut / (float)waveFormat.SampleRate;
+            float low_cutoff = (float)Config.AudioConfig.AudioLowCut / (float)waveFormat.SampleRate;
+            audioFilter = new BandPassFilter(low_cutoff, high_cutoff, 8);
+
+            // Tone detector
+            toneDetector = new MBEToneDetector();
 
             // TX Local Repeat Audio
             if (Config.AudioConfig.TxLocalRepeat)
@@ -160,6 +177,7 @@ namespace rc2_dvm
             Log.Logger.Information($"    Source ID: {Config.SourceId}");
             Log.Logger.Information($"    Listening on: {Config.ListenAddress}:{Config.ListenPort}");
             Log.Logger.Information($"    Audio Config:");
+            Log.Logger.Information($"        Audio Bandpass:  {Config.AudioConfig.AudioLowCut} to {Config.AudioConfig.AudioHighCut} Hz");
             Log.Logger.Information($"        RX Audio Gain:   {Config.AudioConfig.RxAudioGain}");
             Log.Logger.Information($"        RX Vocoder Gain: {Config.AudioConfig.RxVocoderGain}");
             Log.Logger.Information($"        RX Vocoder AGC:  {Config.AudioConfig.RxVocoderAGC}");

@@ -12,6 +12,7 @@
 */
 using System;
 using System.Runtime.InteropServices;
+using Serilog;
 
 #if WIN32
 namespace rc2_dvm
@@ -195,7 +196,7 @@ namespace rc2_dvm
         /// </summary>
         /// <param name="codeword"></param>
         /// <param name="samples"></param>
-        public int decode([In] byte[] codeword, [Out] short[] samples)
+        public int decode(byte[] codeword, out short[] samples)
         {
             samples = new short[MBE_SAMPLES_LENGTH];
 

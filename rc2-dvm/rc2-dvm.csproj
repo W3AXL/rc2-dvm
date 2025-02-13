@@ -19,13 +19,11 @@
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x86'">
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <OutputPath>$(SolutionDir)\out\x86\Debug</OutputPath>
     <DefineConstants>TRACE;WIN32;</DefineConstants>
 	<RuntimeIdentifier>win-x86</RuntimeIdentifier>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x86'">
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <OutputPath>$(SolutionDir)\out\x86\Release</OutputPath>
     <DefineConstants>WIN32;</DefineConstants>
 	<RuntimeIdentifier>win-x86</RuntimeIdentifier>
   </PropertyGroup>

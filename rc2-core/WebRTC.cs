@@ -92,7 +92,7 @@ namespace rc2_core
             // If we don't have a peer connection, return
             if (pc == null || RxFormat.RtpClockRate == 0)
             {
-                Log.Logger.Debug($"Ignoring RX samples, WebRTC peer not connected");
+                //Log.Logger.Debug($"Ignoring RX samples, WebRTC peer not connected");
                 return;
             }
             
@@ -127,7 +127,7 @@ namespace rc2_core
             // If we don't have a peer connection, return
             if (pc == null || RxFormat.RtpClockRate == 0)
             {
-                Log.Logger.Debug($"Ignoring RX samples, WebRTC peer not connected");
+                //Log.Logger.Debug($"Ignoring RX samples, WebRTC peer not connected");
                 return;
             }
 

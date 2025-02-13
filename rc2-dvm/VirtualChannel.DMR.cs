@@ -224,7 +224,7 @@ namespace rc2_dvm
                     int errs = 0;
 #if WIN32
                     if (extHalfRateVocoder != null)
-                        errs = extHalfRateVocoder.decode(ambePartial, samples);
+                        errs = extHalfRateVocoder.decode(ambePartial, out samples);
                     else
                         errs = decoder.decode(ambePartial, samples);
 #else

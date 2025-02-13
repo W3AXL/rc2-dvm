@@ -71,13 +71,23 @@ namespace rc2_dvm
             // Convert to floats
             float[] fSamples = Utils.PcmToFloat(pcm16);
 
-            // Apply filter
+            // Convert to signal
             DiscreteSignal signal = new DiscreteSignal(waveFormat.SampleRate, fSamples, true);
+
+            // Detect tone
+            int tone = toneDetector.Detect(signal);
+            if (tone > 0)
+            {
+                // TODO: generate tone frame instead of voice frame
+            }
+
+            // Apply filter
             DiscreteSignal filtered = audioFilter.ApplyTo(signal);
 
             // Apply Gain
             filtered = filtered * Config.AudioConfig.TxAudioGain;
 
+            
             // Convert back to pcm16 samples
             short[] filtered16 = Utils.FloatToPcm(filtered.Samples);
 
@@ -284,7 +294,7 @@ namespace rc2_dvm
                     int errs = 0;
 #if WIN32
                     if (extFullRateVocoder != null)
-                        errs = extFullRateVocoder.decode(imbe, samples);
+                        errs = extFullRateVocoder.decode(imbe, out samples);
                     else
                         errs = decoder.decode(imbe, samples);
 #else
@@ -292,7 +302,7 @@ namespace rc2_dvm
 #endif
                     if (samples != null)
                     {
-                        Log.Logger.Debug($"({Config.Name}) P25D: Traffic *VOICE FRAME    * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} VC{n} ERRS {errs} [STREAM ID {e.StreamId}]");
+                        //Log.Logger.Debug($"({Config.Name}) P25D: Traffic *VOICE FRAME    * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} VC{n} ERRS {errs} [STREAM ID {e.StreamId}]");
                         //Log.Logger.Debug($"IMBE {FneUtils.HexDump(imbe)}");
                         //Log.Logger.Debug($"SAMPLE BUFFER {FneUtils.HexDump(samples)}");
 

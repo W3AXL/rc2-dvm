@@ -235,20 +235,14 @@ namespace rc2_dvm
             {
                 // Copy bits
                 mbeBits = new byte[AMBE_CODEWORD_BITS];
-                for (int n = 0; n < AMBE_CODEWORD_BITS; n++)
-                {
-                    mbeBits[n] = (byte)bits[n];
-                }
+                Array.Copy(bits, mbeBits, AMBE_CODEWORD_BITS);
 
             }
             else if (mode == MBE_MODE.IMBE_88BIT)
             {
                 // Copy bits
                 mbeBits = new byte[IMBE_CODEWORD_BITS];
-                for (int n = 0; n < IMBE_CODEWORD_BITS; n++)
-                {
-                    mbeBits[n] = (byte)bits[n];
-                }
+                Array.Copy(bits, mbeBits, IMBE_CODEWORD_BITS);
             }
 
             return errs;
