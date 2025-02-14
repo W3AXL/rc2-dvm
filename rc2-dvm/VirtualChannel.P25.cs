@@ -74,44 +74,53 @@ namespace rc2_dvm
             // Convert to signal
             DiscreteSignal signal = new DiscreteSignal(waveFormat.SampleRate, fSamples, true);
 
-            // Detect tone
-            int tone = toneDetector.Detect(signal);
+            // buffer for IMBE codeword
+            byte[] imbe = new byte[FneSystemBase.IMBE_BUF_LEN];
+
+            // Detect tone and send tone codeword if detected
+            int tone = 0;
+            if (Config.AudioConfig.TxToneDetection)
+            {
+                tone = toneDetector.Detect(signal);
+            }
             if (tone > 0)
             {
-                // TODO: generate tone frame instead of voice frame
+                MBEToneGenerator.IMBEEncodeSingleTone((ushort)tone, imbe);
             }
-
-            // Apply filter
-            DiscreteSignal filtered = audioFilter.ApplyTo(signal);
-
-            // Apply Gain
-            filtered = filtered * Config.AudioConfig.TxAudioGain;
-
-            
-            // Convert back to pcm16 samples
-            short[] filtered16 = Utils.FloatToPcm(filtered.Samples);
-
-            // TX local repeat
-            if (Config.AudioConfig.TxLocalRepeat)
-            {
-                byte[] pcm = new byte[filtered16.Length * 2];
-                Buffer.BlockCopy(filtered16, 0, pcm, 0, pcm.Length);
-                bufferedWaveProvider.AddSamples(pcm, 0, pcm.Length);
-            }
-
-            //Log.Logger.Debug($"SAMPLE BUFFER {FneUtils.HexDump(filtered16)}");
-
-            // encode PCM samples into IMBE codewords
-            byte[] imbe = new byte[FneSystemBase.IMBE_BUF_LEN];
-#if WIN32
-            if (extFullRateVocoder != null)
-                extFullRateVocoder.encode(filtered16, out imbe);
             else
-                encoder.encode(filtered16, imbe);
+            {
+                // Apply filter
+                DiscreteSignal filtered = audioFilter.ApplyTo(signal);
+
+                // Apply Gain
+                filtered = filtered * Config.AudioConfig.TxAudioGain;
+
+
+                // Convert back to pcm16 samples
+                short[] filtered16 = Utils.FloatToPcm(filtered.Samples);
+
+                // TX local repeat
+                if (Config.AudioConfig.TxLocalRepeat)
+                {
+                    byte[] pcm = new byte[filtered16.Length * 2];
+                    Buffer.BlockCopy(filtered16, 0, pcm, 0, pcm.Length);
+                    bufferedWaveProvider.AddSamples(pcm, 0, pcm.Length);
+                }
+
+                //Log.Logger.Debug($"SAMPLE BUFFER {FneUtils.HexDump(filtered16)}");
+
+                // encode PCM samples into IMBE codewords
+#if WIN32
+                if (extFullRateVocoder != null)
+                    extFullRateVocoder.encode(filtered16, out imbe);
+                else
+                    encoder.encode(filtered16, imbe);
 #else
-            encoder.encode(filtered16, imbe);
+                encoder.encode(filtered16, imbe);
 #endif
-            //Log.Logger.Debug($"IMBE {FneUtils.HexDump(imbe)}");
+                //Log.Logger.Debug($"IMBE {FneUtils.HexDump(imbe)}");
+            }
+
 #if ENCODER_LOOPBACK_TEST
             short[] samp2 = null;
             int errs = p25Decoder.decode(imbe, out samp2);

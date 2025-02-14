@@ -46,4 +46,10 @@
     <ProjectReference Include="..\rc2-core\rc2-core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="config.yml">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

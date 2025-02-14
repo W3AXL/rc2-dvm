@@ -154,7 +154,7 @@ namespace rc2_dvm
             audioFilter = new BandPassFilter(low_cutoff, high_cutoff, 8);
 
             // Tone detector
-            toneDetector = new MBEToneDetector();
+            toneDetector = new MBEToneDetector(Config.AudioConfig.TxToneRatio, 3, Config.AudioConfig.TxToneLowerLimit, Config.AudioConfig.TxToneUpperLimit);
 
             // TX Local Repeat Audio
             if (Config.AudioConfig.TxLocalRepeat)

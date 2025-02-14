@@ -71,6 +71,10 @@ namespace rc2_dvm
         // Bin size in hz
         private static float bin_size_hz = (float)sample_rate / 2f / (float)num_coeffs;
 
+        // Bounds of tone detection (in bin index format)
+        private int low_bin_limit;
+        private int high_bin_limit;
+
         // This is the tone detection ratio (amplitude of max bin divided by average of all others)
         private int detect_ratio;
 
@@ -89,13 +93,15 @@ namespace rc2_dvm
         /// </summary>
         /// <param name="detect_ratio">Ratio required for a valid tone detection</param>
         /// <param name="hits_reqd">Number of repeated "hits" on a frequency to count as a tone detection</param>
-        public MBEToneDetector(int detect_ratio = 90, int hits_reqd = 3)
+        public MBEToneDetector(int detect_ratio = 90, int hits_reqd = 2, int low_limit = 250, int high_limit = 3000)
         {
             this.detect_ratio = detect_ratio;
             this.hits_reqd = hits_reqd;
             stft = new Stft(window_size, 1, NWaves.Windows.WindowType.Hann, num_coeffs);
             hits_freq = 0;
             num_hits = 0;
+            low_bin_limit = (int)(low_limit / bin_size_hz);
+            high_bin_limit = (int)(high_limit / bin_size_hz);
         }
 
         /// <summary>
@@ -118,8 +124,14 @@ namespace rc2_dvm
             // Analyze
             float[] values = stft.Spectrogram(signal)[0];
 
+            // Remove bins outside our limit
+            float[] limited_values = values[low_bin_limit..high_bin_limit];
+
             // Find max (from https://stackoverflow.com/a/50239922/1842613)
-            (float max_val, int max_idx) = values.Select((n, i) => (n, i)).Max();
+            (float max_val, int max_idx) = limited_values.Select((n, i) => (n, i)).Max();
+
+            // Add back in our lower limit so the index is correct
+            max_idx += low_bin_limit;
 
             // Calculate sum of all others
             float sum = values.Sum() - max_val;
@@ -138,8 +150,8 @@ namespace rc2_dvm
             {
                 // Calculate the tone frequency
                 int tone_freq = (int)(bin_size_hz * max_idx);
-                // Determine hits
 
+                // Determine hits
                 if (hits_freq == tone_freq)
                 {
                     num_hits++;

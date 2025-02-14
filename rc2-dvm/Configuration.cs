@@ -68,6 +68,23 @@ namespace rc2_dvm
         /// Whether to play TX audio through the local default speakers
         /// </summary>
         public bool TxLocalRepeat = false;
+
+        /// <summary>
+        /// Whether to enable tone detection logic for the channel
+        /// </summary>
+        public bool TxToneDetection = false;
+        /// <summary>
+        /// Ratio of tone frequency to rest of FFT
+        /// </summary>
+        public int TxToneRatio = 90;
+        /// <summary>
+        /// Lower limit for tone detection in Hz
+        /// </summary>
+        public int TxToneLowerLimit = 280;
+        /// <summary>
+        /// Upper limit for tone detection in Hz
+        /// </summary>
+        public int TxToneUpperLimit = 3000;
     }
 
     /// <summary>
