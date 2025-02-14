@@ -158,7 +158,7 @@ namespace rc2_dvm
                     if (num_hits >= hits_reqd)
                     {
                         // Debug
-                        Log.Logger.Debug($"Detected {tone_freq} Hz tone! (ratio {ratio})");
+                        //Log.Logger.Debug($"Detected {tone_freq} Hz tone! (ratio {ratio})");
                         return tone_freq;
                     }
                 }
