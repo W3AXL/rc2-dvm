@@ -24,4 +24,4 @@ $ dotnet build
 $ dotnet publish -c Release -r win-x86 --self-contained true -p:PublishSingleFile=true "rc2-dvm/rc2-dvm.csproj"
 ```
 
-Reference `config.example.yml` for information on configuring an `rc2-dvm` instance to communicate with your DVM FNE instance.
+Reference [`config.example.yml`](https://github.com/W3AXL/rc2-dvm/blob/main/rc2-dvm/config.example.yml) for information on configuring an `rc2-dvm` instance to communicate with your DVM FNE instance.
