@@ -12,6 +12,8 @@ Future work will allow for building on dotnet for linux as well, but currently `
 
 `RC2-DVM` requires a copy of the `libvocoder` software vocoder library from the [dvmvocoder](https://github.com/DVMProject/dvmvocoder). You can download the latest release yourself, or clone the repository and compile the .dll file using cmake directly.
 
+Either way, ensure that libvocoder.dll is present in the same directory as rc2-dvm.exe
+
 ### Building RC2-DVM
 
 Use the following steps to build the project and create a single-file .exe:
