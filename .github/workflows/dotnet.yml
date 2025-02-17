@@ -4,6 +4,19 @@
 name: Cross-Platform Build
 
 on:
+  # Allow manual runs
+  workflow_dispatch:
+  # Allow calling from other workflows
+  workflow_call:
+    inputs:
+      release:
+        required: false
+        type: boolean
+        default: false
+      release_tag:
+        required: false
+        type: string
+  # Call on push/PR
   push:
     branches: [ "main" ]
   pull_request:
@@ -34,8 +47,18 @@ jobs:
     - name: Publish
       run: dotnet publish -c Release -r win-x86 -o "${{env.DOTNET_ROOT}}/rc2-dvm" --self-contained true -p:PublishSingleFile=true "rc2-dvm/rc2-dvm.csproj"
 
-    - name: Upload
+    - name: Upload non-release exe
+      if: ${{ !(inputs.release) }}
       uses: actions/upload-artifact@v4
       with:
         name: rc2-dvm-win-x86
         path: ${{env.DOTNET_ROOT}}/rc2-dvm/rc2-dvm.exe
+
+    - name: Upload release zip
+      if: ${{ inputs.release }}
+      env:
+       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        cd ${{env.DOTNET_ROOT}}/rc2-dvm/
+        Compress-Archive -Path "*.exe", "config.example.yml", "*.dll" -Destination rc2-dvm-${{ inputs.release_tag }}-win-x86.zip
+        gh relesae upload ${{ inputs.release_tag }} rc2-dvm-${{ inputs.release_tag }}-win-x86.zip
