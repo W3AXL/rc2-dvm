@@ -92,8 +92,7 @@ namespace rc2_dvm
 
 #if WIN32
             // Try to find external AMBE.DLL interop library
-            
-            string codeBase = Assembly.GetExecutingAssembly().Location;
+            string codeBase = System.AppContext.BaseDirectory;
             UriBuilder uri = new UriBuilder(codeBase);
             string path = Uri.UnescapeDataString(uri.Path);
             string ambePath = Path.Combine(new string[] { Path.GetDirectoryName(path), "AMBE.DLL" });
