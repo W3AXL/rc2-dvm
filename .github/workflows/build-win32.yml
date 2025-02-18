@@ -59,6 +59,6 @@ jobs:
       env:
        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        cd "${{env.DOTNET_ROOT}}/rc2-dvm/"
+        & cd "${{env.DOTNET_ROOT}}/rc2-dvm/"
         Compress-Archive -Path "*.exe", "config.example.yml", "*.dll" -Destination rc2-dvm-${{ inputs.release_tag }}-win-x86.zip
         gh relesae upload ${{ inputs.release_tag }} rc2-dvm-${{ inputs.release_tag }}-win-x86.zip
