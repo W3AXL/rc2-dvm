@@ -52,13 +52,15 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: rc2-dvm-win-x86
-        path: ${{env.DOTNET_ROOT}}/rc2-dvm/rc2-dvm.exe
+        path: |
+          ${{env.DOTNET_ROOT}}/rc2-dvm/*.exe
+          ${{env.DOTNET_ROOT}}/rc2-dvm/*.dll
+          ${{env.DOTNET_ROOT}}/rc2-dvm/config.example.yml
 
     - name: Upload release zip
       if: ${{ inputs.release }}
       env:
        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        & cd "${{env.DOTNET_ROOT}}/rc2-dvm/"
-        Compress-Archive -Path "*.exe", "config.example.yml", "*.dll" -Destination rc2-dvm-${{ inputs.release_tag }}-win-x86.zip
+        Compress-Archive -Path "${{env.DOTNET_ROOT}}/rc2-dvm/*.exe", "${{env.DOTNET_ROOT}}/rc2-dvm/*.dll", "${{env.DOTNET_ROOT}}/rc2-dvm/config.example.yml" -Destination rc2-dvm-${{ inputs.release_tag }}-win-x86.zip
         gh release upload ${{ inputs.release_tag }} rc2-dvm-${{ inputs.release_tag }}-win-x86.zip
