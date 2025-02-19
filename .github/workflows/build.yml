@@ -42,7 +42,7 @@ jobs:
       run: dotnet restore
     
     - name: Build & Publish
-      run: dotnet publish --no-restore -c Release -r win-x86 -o "${{env.DOTNET_ROOT}}/rc2-dvm" --self-contained true -p:PublishSingleFile=true "rc2-dvm/rc2-dvm.csproj"
+      run: dotnet publish --no-restore -c Release -r win-x86 -o "${{env.DOTNET_ROOT}}/rc2-dvm" --self-contained true -p:PublishSingleFile=true -p:ExtraConstants=WIN32 "rc2-dvm/rc2-dvm.csproj"
 
     - name: Upload non-release exe
       if: ${{ !(inputs.release) }}

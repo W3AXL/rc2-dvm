@@ -15,6 +15,7 @@
     <Platforms>x86</Platforms>
     <PlatformTarget>x86</PlatformTarget>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+	<DefineConstants>$(ExtraConstants)</DefineConstants>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x86'">
