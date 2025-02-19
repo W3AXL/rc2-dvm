@@ -378,6 +378,11 @@ namespace rc2_dvm
         /// <returns></returns>
         public bool StopTransmit()
         {
+            // Do nothing if we're not transmitting
+            if (dvmRadio.Status.State != RadioState.Transmitting)
+            {
+                return false;
+            }
             Log.Logger.Information($"({Config.Name}) Stop TX on TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
             // Send TDU
             RC2DVM.fneSystem.SendP25TDU(Config.SourceId, CurrentTalkgroup.DestinationId);
