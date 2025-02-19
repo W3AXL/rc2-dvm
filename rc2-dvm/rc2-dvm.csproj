@@ -20,12 +20,12 @@
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x86'">
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <DefineConstants>TRACE;WIN32;</DefineConstants>
+    <DefineConstants>TRACE;WIN32;$(ExtraConstants)</DefineConstants>
 	<RuntimeIdentifier>win-x86</RuntimeIdentifier>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x86'">
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <DefineConstants>WIN32;</DefineConstants>
+    <DefineConstants>WIN32;$(ExtraConstants)</DefineConstants>
 	<RuntimeIdentifier>win-x86</RuntimeIdentifier>
   </PropertyGroup>
 
