@@ -362,8 +362,12 @@ namespace rc2_dvm
                 callInProgress = true;
                 callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
                 status[FneSystemBase.P25_FIXED_SLOT].RxStart = pktTime;
-                // Update status
+                // Update state
                 dvmRadio.Status.State = rc2_core.RadioState.Receiving;
+                // Start source ID display callback
+                lastSourceId = e.SrcId;
+                sourceIdTimer.Start();
+                // Status update
                 dvmRadio.StatusCallback();
                 // Log
                 Log.Logger.Information($"({Config.Name}) P25D: Traffic *CALL START     * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} [STREAM ID {e.StreamId}]");
@@ -376,8 +380,12 @@ namespace rc2_dvm
                 callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
                 callInProgress = false;
                 TimeSpan callDuration = pktTime - status[FneSystemBase.P25_FIXED_SLOT].RxStart;
-                // Update status
+                // Update state
                 dvmRadio.Status.State = rc2_core.RadioState.Idle;
+                // Stop source ID callback
+                sourceIdTimer.Stop();
+                dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
+                // Status update
                 dvmRadio.StatusCallback();
                 // Log
                 Log.Logger.Information($"({Config.Name}) P25D: Traffic *CALL END       * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} DUR {callDuration} [STREAM ID {e.StreamId}]");

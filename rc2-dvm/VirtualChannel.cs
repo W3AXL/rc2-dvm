@@ -17,6 +17,7 @@ using rc2_core;
 using NWaves.Filters.OnePole;
 using NWaves.Filters.Butterworth;
 using NWaves.Signals;
+using System.Timers;
 
 namespace rc2_dvm
 {
@@ -45,6 +46,11 @@ namespace rc2_dvm
         private SlotStatus[] status;
 
         private uint txStreamId;
+
+        // Variables for displaying active source ID
+        private bool showingSourceId;
+        private uint lastSourceId;
+        private System.Timers.Timer sourceIdTimer;
 
         private DVMRadio dvmRadio;
 
@@ -147,6 +153,12 @@ namespace rc2_dvm
                 
             }
 
+            // Init source ID display stuff
+            sourceIdTimer = new System.Timers.Timer(1000);
+            sourceIdTimer.Elapsed += sourceIdTimerCallback;
+            //sourceIdTimer.Enabled = true;
+
+
             // Init filter for audio
             float high_cutoff = (float)Config.AudioConfig.AudioHighCut / (float)waveFormat.SampleRate;
             float low_cutoff = (float)Config.AudioConfig.AudioLowCut / (float)waveFormat.SampleRate;
@@ -208,6 +220,22 @@ namespace rc2_dvm
 
             dvmRadio.Status.ZoneName = Config.Zone;
             dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
+        }
+
+        private void sourceIdTimerCallback(Object source, ElapsedEventArgs e)
+        {
+            if (showingSourceId)
+            {
+                dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
+                dvmRadio.StatusCallback();
+                showingSourceId = false;
+            }
+            else
+            {
+                dvmRadio.Status.ChannelName = $"ID: {lastSourceId}";
+                dvmRadio.StatusCallback();
+                showingSourceId = true;
+            }
         }
 
         /// <summary>
