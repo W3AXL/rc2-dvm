@@ -30,7 +30,7 @@ log:
 #
 network:
     # Network Peer ID
-    peerId: 910201
+    peerId: 999000
     # Identity of this peer
     identity: "RC2DVM"
     
@@ -71,6 +71,10 @@ virtualChannels:
     mode: 2
     # Vocoder Audio Configuration
     audioConfig:
+        # Audio bandpass filter low cut (Hz)
+        audioLowCut: 300
+        # Audio bandpass filter high cut (Hz)
+        audioHighCut: 3000
         # Post-vocoder RX audio gain
         rxAudioGain: 1.0
         # Vocoder RX audio gain (not used for external vocoders)
@@ -83,6 +87,14 @@ virtualChannels:
         txVocoderGain: 3.0
         # Whether to repeat TX audio from the console on the local PC speakers
         txLocalRepeat: false
+        # Whether to detect tones
+        txToneDetection: true
+        # Ratio above which a valid tone is detected (keep this default unless you get false positives)
+        txToneRatio: 95
+        # Lower limit for tone detection in hz
+        txToneLowerLimit: 500
+        # Upper limit for tone detection in hz
+        txToneUpperLimit: 2000
 
     # Source ID for this virtual channel ("radio ID")
     sourceId: 1
