@@ -165,7 +165,7 @@ namespace rc2_dvm
             audioFilter = new BandPassFilter(low_cutoff, high_cutoff, 8);
 
             // Tone detector
-            toneDetector = new MBEToneDetector(Config.AudioConfig.TxToneRatio, 2, Config.AudioConfig.TxToneLowerLimit, Config.AudioConfig.TxToneUpperLimit);
+            toneDetector = new MBEToneDetector(Config.AudioConfig.TxToneRatio, Config.AudioConfig.TxToneHits, Config.AudioConfig.TxToneLowerLimit, Config.AudioConfig.TxToneUpperLimit);
 
             // TX Local Repeat Audio
             if (Config.AudioConfig.TxLocalRepeat)
@@ -188,13 +188,20 @@ namespace rc2_dvm
             Log.Logger.Information($"    Source ID: {Config.SourceId}");
             Log.Logger.Information($"    Listening on: {Config.ListenAddress}:{Config.ListenPort}");
             Log.Logger.Information($"    Audio Config:");
-            Log.Logger.Information($"        Audio Bandpass:  {Config.AudioConfig.AudioLowCut} to {Config.AudioConfig.AudioHighCut} Hz");
-            Log.Logger.Information($"        RX Audio Gain:   {Config.AudioConfig.RxAudioGain}");
-            Log.Logger.Information($"        RX Vocoder Gain: {Config.AudioConfig.RxVocoderGain}");
-            Log.Logger.Information($"        RX Vocoder AGC:  {Config.AudioConfig.RxVocoderAGC}");
-            Log.Logger.Information($"        TX Audio Gain:   {Config.AudioConfig.TxAudioGain}");
-            Log.Logger.Information($"        TX Vocoder Gain: {Config.AudioConfig.TxVocoderGain}");
-            Log.Logger.Information($"        TX Local Repeat: {Config.AudioConfig.TxLocalRepeat}");
+            Log.Logger.Information($"        Audio Bandpass:      {Config.AudioConfig.AudioLowCut} to {Config.AudioConfig.AudioHighCut} Hz");
+            Log.Logger.Information($"        RX Audio Gain:       {Config.AudioConfig.RxAudioGain}");
+            Log.Logger.Information($"        RX Vocoder Gain:     {Config.AudioConfig.RxVocoderGain}");
+            Log.Logger.Information($"        RX Vocoder AGC:      {Config.AudioConfig.RxVocoderAGC}");
+            Log.Logger.Information($"        TX Audio Gain:       {Config.AudioConfig.TxAudioGain}");
+            Log.Logger.Information($"        TX Vocoder Gain:     {Config.AudioConfig.TxVocoderGain}");
+            Log.Logger.Information($"        TX Local Repeat:     {Config.AudioConfig.TxLocalRepeat}");
+            Log.Logger.Information($"        TX Tone Detection:   {Config.AudioConfig.TxToneDetection}");
+            if (Config.AudioConfig.TxToneDetection)
+            {
+                Log.Logger.Information($"        TX Tone Threshold:   {Config.AudioConfig.TxToneRatio}");
+                Log.Logger.Information($"        TX Tone Hits:        {Config.AudioConfig.TxToneHits}");
+                Log.Logger.Information($"        TX Tone Valid Range: {Config.AudioConfig.TxToneLowerLimit} Hz to {Config.AudioConfig.TxToneUpperLimit} Hz");
+            }
             Log.Logger.Information($"    Mode: {Config.Mode.ToString()}");
             Log.Logger.Information($"    Talkgroups ({Config.Talkgroups.Count}):");
             foreach (TalkgroupConfigObject talkgroup in Config.Talkgroups)
@@ -323,6 +330,8 @@ namespace rc2_dvm
 
         private void resetCall()
         {
+            // Stop source ID callback
+            sourceIdTimer.Stop();
             dvmRadio.Status.State = RadioState.Idle;
             ignoreCall = false;
             callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;

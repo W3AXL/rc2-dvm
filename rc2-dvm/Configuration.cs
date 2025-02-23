@@ -78,6 +78,10 @@ namespace rc2_dvm
         /// </summary>
         public int TxToneRatio = 90;
         /// <summary>
+        /// Number of sequential tone detections required before a tone is transmitted
+        /// </summary>
+        public int TxToneHits = 3;
+        /// <summary>
         /// Lower limit for tone detection in Hz
         /// </summary>
         public int TxToneLowerLimit = 280;

@@ -241,7 +241,15 @@ namespace rc2_dvm
                 Log.Logger.Information("Starting virtual channels");
                 VirtualChannels.ForEach(channel =>
                 {
-                    channel.Start();
+                    try
+                    {
+                        channel.Start();
+                    }
+                    catch (System.InvalidOperationException ex)
+                    {
+                        Log.Logger.Error(ex, $"Failed to start virtual channel {channel.Config.Name} on {channel.Config.ListenAddress}:{channel.Config.ListenPort}");
+                        Environment.Exit((int)ERRNO.EBADCONFIG);
+                    }
                 });
 
                 // Done starting up

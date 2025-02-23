@@ -91,6 +91,8 @@ virtualChannels:
         txToneDetection: true
         # Ratio above which a valid tone is detected (keep this default unless you get false positives)
         txToneRatio: 95
+        # Number of sequential tone detections required before a tone is encoded
+        txToneHits: 3
         # Lower limit for tone detection in hz
         txToneLowerLimit: 500
         # Upper limit for tone detection in hz

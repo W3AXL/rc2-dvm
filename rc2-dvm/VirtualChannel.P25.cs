@@ -86,6 +86,7 @@ namespace rc2_dvm
             if (tone > 0)
             {
                 MBEToneGenerator.IMBEEncodeSingleTone((ushort)tone, imbe);
+                Log.Logger.Debug($"({Config.Name}) P25D: {tone} HZ TONE DETECT");
             }
             else
             {
