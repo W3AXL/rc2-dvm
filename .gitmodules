@@ -1,3 +1,6 @@
 [submodule "fnecore"]
 	path = fnecore
 	url = https://github.com/DVMProject/fnecore
+[submodule "rc2-core"]
+	path = rc2-core
+	url = https://github.com/W3AXL/rc2-core
