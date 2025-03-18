@@ -71,16 +71,25 @@ namespace rc2_dvm
                     endpoint = new IPEndPoint(addresses[0], RC2DVM.Configuration.Network.Port);
             }
 
-            Log.Logger.Information($"    Peer ID: {RC2DVM.Configuration.Network.PeerId}");
-            Log.Logger.Information($"    Master Addresss: {RC2DVM.Configuration.Network.Address}");
-            Log.Logger.Information($"    Master Port: {RC2DVM.Configuration.Network.Port}");
+            Log.Logger.Information("    Peer ID:              {peerId}", RC2DVM.Configuration.Network.PeerId);
+            Log.Logger.Information("    Master Addresss:      {address}", RC2DVM.Configuration.Network.Address);
+            Log.Logger.Information("    Master Port:          {port}", RC2DVM.Configuration.Network.Port);
+            Log.Logger.Information("    Identity:             {identity}", RC2DVM.Configuration.Network.Identity);
+            Log.Logger.Information("    Channel Affiliations: {chanaff}", RC2DVM.Configuration.Network.SendChannelAffiliations);
+            Log.Logger.Information("    Diagnostic Transfer:  {diagxfer}", RC2DVM.Configuration.Network.AllowDiagnosticTransfer);
+            Log.Logger.Information("    Debug:                {debug}", RC2DVM.Configuration.Network.Debug);
 
             FnePeer peer = new FnePeer(RC2DVM.Configuration.Network.Identity, RC2DVM.Configuration.Network.PeerId, endpoint, presharedKey);
 
             // set configuration parameters
             peer.Passphrase = RC2DVM.Configuration.Network.Password;
-
             peer.PingTime = RC2DVM.Configuration.Network.PingTime;
+            peer.Information.Details = new PeerDetails
+            {
+                Identity = RC2DVM.Configuration.Network.Identity,
+                Software = RC2DVM.SWVersionShort,
+                ConventionalPeer = !RC2DVM.Configuration.Network.SendChannelAffiliations,   // If we're not set up to send affiliations, we identify as a conventional peer
+            };
 
             peer.PeerConnected += Peer_PeerConnected;
 
@@ -100,6 +109,11 @@ namespace rc2_dvm
             peer.SendMasterGroupAffiliation(1, (uint)Program.Configuration.DestinationId);*/
 
             // NOTE: Group Affiliations are now handled in each virtual channel
+        }
+
+        protected override void KeyResponse(object sender, KeyResponseEvent e)
+        {
+            // Stub
         }
 
         /// <summary>

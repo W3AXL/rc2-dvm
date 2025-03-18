@@ -195,6 +195,10 @@ namespace rc2_dvm
         /// </summary>
         public string Identity = "RC2DVM";
         /// <summary>
+        /// Whether to send talkgroup affiliations to the master
+        /// </summary>
+        public bool SendChannelAffiliations = false;
+        /// <summary>
         /// Whether to allow diagnostic transfers to the FNE
         /// </summary>
         public bool AllowDiagnosticTransfer = true;

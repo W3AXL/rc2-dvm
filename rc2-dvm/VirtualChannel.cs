@@ -74,6 +74,11 @@ namespace rc2_dvm
         private int currentTgIdx = 0;
 
         /// <summary>
+        /// Timer to trigger an affiliation after a delay
+        /// </summary>
+        private System.Timers.Timer affHoldoffTimer;
+
+        /// <summary>
         /// Currently selected talkgroup for this channel
         /// </summary>
         public TalkgroupConfigObject CurrentTalkgroup
@@ -103,7 +108,7 @@ namespace rc2_dvm
             string path = Uri.UnescapeDataString(uri.Path);
             string ambePath = Path.Combine(new string[] { Path.GetDirectoryName(path), "AMBE.DLL" });
 
-            Log.Logger.Debug($"({Config.Name}) checking for external vocoder library at {ambePath}");
+            Log.Logger.Debug($"({Config.Name}) checking for external vocoder library...");
 
             if (File.Exists(ambePath))
             { 
@@ -158,7 +163,6 @@ namespace rc2_dvm
             sourceIdTimer.Elapsed += sourceIdTimerCallback;
             //sourceIdTimer.Enabled = true;
 
-
             // Init filter for audio
             float high_cutoff = (float)Config.AudioConfig.AudioHighCut / (float)waveFormat.SampleRate;
             float low_cutoff = (float)Config.AudioConfig.AudioLowCut / (float)waveFormat.SampleRate;
@@ -177,42 +181,56 @@ namespace rc2_dvm
                 waveOut.Play();
             }
 
+            // Initialize affiliation holdoff timer
+            affHoldoffTimer = new System.Timers.Timer(1000);
+            affHoldoffTimer.Elapsed += affToCurrentChannel;
+            affHoldoffTimer.AutoReset = false;
+            if (RC2DVM.Configuration.Network.SendChannelAffiliations)
+            {
+                affHoldoffTimer.Enabled = true;
+            }
+            else
+            {
+                affHoldoffTimer.Enabled = false;
+            }
+                
+
             // initialize slot statuses
             status = new SlotStatus[3];
             status[0] = new SlotStatus();  // DMR Slot 1
             status[1] = new SlotStatus();  // DMR Slot 2
             status[2] = new SlotStatus();  // P25
 
-            Log.Logger.Information($"Configured virtual channel {Config.Name}");
-            Log.Logger.Information($"    Mode: {Enum.GetName(typeof(VocoderMode), Config.Mode)}");
-            Log.Logger.Information($"    Source ID: {Config.SourceId}");
-            Log.Logger.Information($"    Listening on: {Config.ListenAddress}:{Config.ListenPort}");
-            Log.Logger.Information($"    Audio Config:");
-            Log.Logger.Information($"        Audio Bandpass:      {Config.AudioConfig.AudioLowCut} to {Config.AudioConfig.AudioHighCut} Hz");
-            Log.Logger.Information($"        RX Audio Gain:       {Config.AudioConfig.RxAudioGain}");
-            Log.Logger.Information($"        RX Vocoder Gain:     {Config.AudioConfig.RxVocoderGain}");
-            Log.Logger.Information($"        RX Vocoder AGC:      {Config.AudioConfig.RxVocoderAGC}");
-            Log.Logger.Information($"        TX Audio Gain:       {Config.AudioConfig.TxAudioGain}");
-            Log.Logger.Information($"        TX Vocoder Gain:     {Config.AudioConfig.TxVocoderGain}");
-            Log.Logger.Information($"        TX Local Repeat:     {Config.AudioConfig.TxLocalRepeat}");
-            Log.Logger.Information($"        TX Tone Detection:   {Config.AudioConfig.TxToneDetection}");
+            Log.Logger.Information("Configured virtual channel {name}", Config.Name);
+            Log.Logger.Information("    Mode: {Enum.GetName(typeof(VocoderMode), Config.Mode)}");
+            Log.Logger.Information("    Source ID: {SourceId}", Config.SourceId);
+            Log.Logger.Information("    Listening on: {ListenAddress}:{ListenPort}", Config.ListenAddress, Config.ListenPort);
+            Log.Logger.Information("    Audio Config:");
+            Log.Logger.Information("        Audio Bandpass:      {AudioLowCut} to {AudioHighCut} Hz", Config.AudioConfig.AudioLowCut, Config.AudioConfig.AudioHighCut);
+            Log.Logger.Information("        RX Audio Gain:       {RxAudioGain}", Config.AudioConfig.RxAudioGain);
+            Log.Logger.Information("        RX Vocoder Gain:     {RxVocoderGain}", Config.AudioConfig.RxVocoderGain);
+            Log.Logger.Information("        RX Vocoder AGC:      {RxVocoderAGC}", Config.AudioConfig.RxVocoderAGC);
+            Log.Logger.Information("        TX Audio Gain:       {TxAudioGain}", Config.AudioConfig.TxAudioGain);
+            Log.Logger.Information("        TX Vocoder Gain:     {TxVocoderGain}", Config.AudioConfig.TxVocoderGain);
+            Log.Logger.Information("        TX Local Repeat:     {TxLocalRepeat}", Config.AudioConfig.TxLocalRepeat);
+            Log.Logger.Information("        TX Tone Detection:   {TxToneDetection}", Config.AudioConfig.TxToneDetection);
             if (Config.AudioConfig.TxToneDetection)
             {
-                Log.Logger.Information($"        TX Tone Threshold:   {Config.AudioConfig.TxToneRatio}");
-                Log.Logger.Information($"        TX Tone Hits:        {Config.AudioConfig.TxToneHits}");
-                Log.Logger.Information($"        TX Tone Valid Range: {Config.AudioConfig.TxToneLowerLimit} Hz to {Config.AudioConfig.TxToneUpperLimit} Hz");
+                Log.Logger.Information("        TX Tone Threshold:   {Config.AudioConfig.TxToneRatio}", Config.AudioConfig.TxToneRatio);
+                Log.Logger.Information("        TX Tone Hits:        {Config.AudioConfig.TxToneHits}", Config.AudioConfig.TxToneHits);
+                Log.Logger.Information("        TX Tone Valid Range: {TxToneLowerLimit} Hz to {TxToneUpperLimit} Hz", Config.AudioConfig.TxToneLowerLimit, Config.AudioConfig.TxToneUpperLimit);
             }
-            Log.Logger.Information($"    Mode: {Config.Mode.ToString()}");
-            Log.Logger.Information($"    Talkgroups ({Config.Talkgroups.Count}):");
+            Log.Logger.Information("    Mode: {Mode}", Config.Mode.ToString());
+            Log.Logger.Information("    Talkgroups ({TGCount}):", Config.Talkgroups.Count);
             foreach (TalkgroupConfigObject talkgroup in Config.Talkgroups)
             {
                 if (Config.Mode == VocoderMode.DMR)
                 {
-                    Log.Logger.Information($"        TGID {talkgroup.DestinationId} TS {talkgroup.Timeslot} ({talkgroup.Name})");
+                    Log.Logger.Information("        TGID {DestinationId} TS {Timeslot} ({Name})", talkgroup.DestinationId, talkgroup.Timeslot, talkgroup.Name);
                 }
                 else
                 {
-                    Log.Logger.Information($"        TGID {talkgroup.DestinationId} ({talkgroup.Name})");
+                    Log.Logger.Information("        TGID {DestinationId} ({Name})", talkgroup.DestinationId, talkgroup.Name);
                 }    
             }
 
@@ -288,8 +306,8 @@ namespace rc2_dvm
                 dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
                 // Reset any active calls
                 resetCall();
-                // Send group affiliation
-                RC2DVM.fneSystem.peer.SendMasterGroupAffiliation(Config.SourceId, CurrentTalkgroup.DestinationId);
+                // Restart affiliation timer
+                resetAffTimer();
                 // Send status update
                 dvmRadio.StatusCallback();
                 // Return success
@@ -318,8 +336,8 @@ namespace rc2_dvm
                 dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
                 // Reset any active calls
                 resetCall();
-                // Send group affiliation
-                RC2DVM.fneSystem.peer.SendMasterGroupAffiliation(Config.SourceId, CurrentTalkgroup.DestinationId);
+                // Restart affiliation timer
+                resetAffTimer();
                 // Send status update
                 dvmRadio.StatusCallback();
                 // Return success
@@ -328,10 +346,38 @@ namespace rc2_dvm
             else { return false; }
         }
 
+        /// <summary>
+        /// Callback for affiliation holdoff timer to send the group affiliation for the currently selected talkgroup
+        /// </summary>
+        /// <param name="source"></param>
+        /// <param name="e"></param>
+        private void affToCurrentChannel(Object source, ElapsedEventArgs e)
+        {
+            Log.Logger.Information("Sending GRP AFF for TG {tg} ({tgid})", CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
+            RC2DVM.fneSystem.peer.SendMasterGroupAffiliation(Config.SourceId, CurrentTalkgroup.DestinationId);
+        }
+
+        /// <summary>
+        /// Resets and restarts the affiliation holdoff timer
+        /// </summary>
+        private void resetAffTimer()
+        {
+            if (RC2DVM.Configuration.Network.SendChannelAffiliations)
+            {
+                Log.Logger.Debug("Restarting affiliation holdoff timer");
+                affHoldoffTimer.Stop();
+                affHoldoffTimer.Start();
+            }
+        }
+
+        /// <summary>
+        /// Resets current call data
+        /// </summary>
         private void resetCall()
         {
             // Stop source ID callback
             sourceIdTimer.Stop();
+            // Update status
             dvmRadio.Status.State = RadioState.Idle;
             ignoreCall = false;
             callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
@@ -359,6 +405,13 @@ namespace rc2_dvm
             return false;
         }
 
+        /// <summary>
+        /// Returns true if this virtual channel has the specified mode/talkgroup/timeslot configured in its list
+        /// </summary>
+        /// <param name="mode"></param>
+        /// <param name="tgid"></param>
+        /// <param name="slot"></param>
+        /// <returns></returns>
         public bool HasTalkgroupConfigured(VocoderMode mode, uint tgid, uint slot = 1)
         {
             if (mode != Config.Mode) { return false; }

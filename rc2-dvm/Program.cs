@@ -81,6 +81,16 @@ namespace rc2_dvm
         /// </summary>
         public static List<VirtualChannel> VirtualChannels = new List<VirtualChannel>();
 
+        /// <summary>
+        /// Long-format version string
+        /// </summary>
+        public static readonly string SWVersionLong = $"RC2-DVM v{ThisAssembly.Git.SemVer.Major}.{ThisAssembly.Git.SemVer.Minor}.{ThisAssembly.Git.SemVer.Patch}{ThisAssembly.Git.SemVer.DashLabel} ({ThisAssembly.Git.Commit.ToUpper()})";
+
+        /// <summary>
+        /// Short-format version string
+        /// </summary>
+        public static readonly string SWVersionShort = $"RC2DVM_{ThisAssembly.Git.SemVer.Major}.{ThisAssembly.Git.SemVer.Minor}.{ThisAssembly.Git.SemVer.Patch}{ThisAssembly.Git.SemVer.DashLabel}";
+
         public static async Task<int> Main(string[] args)
         {
             // Config File Command Line Option
@@ -213,7 +223,7 @@ namespace rc2_dvm
 
             // Initialize Logger
             Log.Logger = logConfig.CreateLogger();
-            Log.Logger.Information(AssemblyVersion._VERSION);
+            Log.Logger.Information($"{SWVersionLong}");
             Log.Logger.Information(AssemblyVersion._COPYRIGHT);
 
             // Start things up
