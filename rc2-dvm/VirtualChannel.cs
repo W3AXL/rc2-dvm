@@ -201,8 +201,10 @@ namespace rc2_dvm
             status[1] = new SlotStatus();  // DMR Slot 2
             status[2] = new SlotStatus();  // P25
 
+            
+            
             Log.Logger.Information("Configured virtual channel {name}", Config.Name);
-            Log.Logger.Information("    Mode: {Enum.GetName(typeof(VocoderMode), Config.Mode)}");
+            Log.Logger.Information("    Mode: {mode}",Config.Mode);
             Log.Logger.Information("    Source ID: {SourceId}", Config.SourceId);
             Log.Logger.Information("    Listening on: {ListenAddress}:{ListenPort}", Config.ListenAddress, Config.ListenPort);
             Log.Logger.Information("    Audio Config:");
