@@ -50,9 +50,7 @@ namespace rc2_dvm
     /// </summary>
     public class AudioConfigObject
     {
-        public uint AudioLowCut = 200;
-
-        public uint AudioHighCut = 3000;
+        public uint AudioHighCut = 3500;
 
         public float RxAudioGain = 1.0f;
 

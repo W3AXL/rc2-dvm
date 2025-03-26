@@ -128,6 +128,7 @@ namespace rc2_dvm
 
                         IDeserializer ymlDeserializer = new DeserializerBuilder()
                             .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                            .IgnoreUnmatchedProperties()
                             .Build();
 
                         config = ymlDeserializer.Deserialize<ConfigObject>(yml);

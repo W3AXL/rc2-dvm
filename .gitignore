@@ -405,3 +405,4 @@ out/
 
 # Non-example config files
 config.yml
+config-*.yml

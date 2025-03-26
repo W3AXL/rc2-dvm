@@ -91,11 +91,10 @@ namespace rc2_dvm
             else
             {
                 // Apply filter
-                DiscreteSignal filtered = audioFilter.ApplyTo(signal);
+                DiscreteSignal filtered = txAudioFilter.ApplyTo(signal);
 
                 // Apply Gain
                 filtered = filtered * Config.AudioConfig.TxAudioGain;
-
 
                 // Convert back to pcm16 samples
                 short[] filtered16 = Utils.FloatToPcm(filtered.Samples);
@@ -321,7 +320,7 @@ namespace rc2_dvm
 
                         // Apply filter
                         DiscreteSignal signal = new DiscreteSignal(waveFormat.SampleRate, fSamples, true);
-                        DiscreteSignal filtered = audioFilter.ApplyTo(signal);
+                        DiscreteSignal filtered = rxAudioFilter.ApplyTo(signal);
 
                         // Apply Gain
                         filtered = filtered * Config.AudioConfig.RxAudioGain;

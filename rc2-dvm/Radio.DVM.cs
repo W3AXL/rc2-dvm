@@ -12,9 +12,9 @@ namespace rc2_dvm
     internal class DVMRadio : Radio
     {
         // Fixed softkeys for a DVM channel
-        internal static List<Softkey> DVMSoftkeys = new List<Softkey>
+        internal static List<SoftkeyName> DVMSoftkeys = new List<SoftkeyName>
         {
-            new Softkey(SoftkeyName.SCAN, "Virtual Talkgroup Scanning")
+            SoftkeyName.SCAN
         };
 
         // Talkgroup list

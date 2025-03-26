@@ -74,10 +74,8 @@ virtualChannels:
     mode: 2
     # Vocoder Audio Configuration
     audioConfig:
-        # Audio bandpass filter low cut (Hz)
-        audioLowCut: 300
-        # Audio bandpass filter high cut (Hz)
-        audioHighCut: 3000
+        # Audio lowpass filter high cut (Hz)
+        audioHighCut: 3500
         # Post-vocoder RX audio gain
         rxAudioGain: 1.0
         # Vocoder RX audio gain (not used for external vocoders)

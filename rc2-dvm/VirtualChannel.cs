@@ -14,10 +14,13 @@ using System.Threading.Tasks;
 using System.Media;
 using System.Reflection;
 using rc2_core;
-using NWaves.Filters.OnePole;
 using NWaves.Filters.Butterworth;
-using NWaves.Signals;
 using System.Timers;
+using TinyJson;
+using NAudio.Dsp;
+using NWaves.Signals;
+using NWaves.Signals.Builders;
+using NWaves.Signals.Builders.Base;
 
 namespace rc2_dvm
 {
@@ -58,8 +61,9 @@ namespace rc2_dvm
         private WaveOutEvent waveOut;
         private BufferedWaveProvider bufferedWaveProvider;
 
-        // Filter for audio
-        private NWaves.Filters.Butterworth.BandPassFilter audioFilter;
+        // Filters for TX/RX audio 
+        private LowPassFilter txAudioFilter;
+        private LowPassFilter rxAudioFilter;
 
         // MBE Tone Detector
         private MBEToneDetector toneDetector;
@@ -163,10 +167,10 @@ namespace rc2_dvm
             sourceIdTimer.Elapsed += sourceIdTimerCallback;
             //sourceIdTimer.Enabled = true;
 
-            // Init filter for audio
+            // Init filters for TX & RX audio
             float high_cutoff = (float)Config.AudioConfig.AudioHighCut / (float)waveFormat.SampleRate;
-            float low_cutoff = (float)Config.AudioConfig.AudioLowCut / (float)waveFormat.SampleRate;
-            audioFilter = new BandPassFilter(low_cutoff, high_cutoff, 8);
+            txAudioFilter = new LowPassFilter(high_cutoff, 8);
+            rxAudioFilter = new LowPassFilter(high_cutoff, 8);
 
             // Tone detector
             toneDetector = new MBEToneDetector(Config.AudioConfig.TxToneRatio, Config.AudioConfig.TxToneHits, Config.AudioConfig.TxToneLowerLimit, Config.AudioConfig.TxToneUpperLimit);
@@ -208,7 +212,7 @@ namespace rc2_dvm
             Log.Logger.Information("    Source ID: {SourceId}", Config.SourceId);
             Log.Logger.Information("    Listening on: {ListenAddress}:{ListenPort}", Config.ListenAddress, Config.ListenPort);
             Log.Logger.Information("    Audio Config:");
-            Log.Logger.Information("        Audio Bandpass:      {AudioLowCut} to {AudioHighCut} Hz", Config.AudioConfig.AudioLowCut, Config.AudioConfig.AudioHighCut);
+            Log.Logger.Information("        Audio Lowpass:       {AudioHighCut} Hz", Config.AudioConfig.AudioHighCut);
             Log.Logger.Information("        RX Audio Gain:       {RxAudioGain}", Config.AudioConfig.RxAudioGain);
             Log.Logger.Information("        RX Vocoder Gain:     {RxVocoderGain}", Config.AudioConfig.RxVocoderGain);
             Log.Logger.Information("        RX Vocoder AGC:      {RxVocoderAGC}", Config.AudioConfig.RxVocoderAGC);

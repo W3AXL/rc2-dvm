@@ -55,6 +55,26 @@ namespace rc2_dvm
             DiscreteSignal resampled = resampler.Resample(signal, outputSampleRate);
             return FloatToPcm(resampled.Samples);
         }
+
+        /// <summary>
+        /// Converts a linear gain value to its equivalent voltage gain DB value (20 * log10)
+        /// </summary>
+        /// <param name="linear">linear gain value</param>
+        /// <returns></returns>
+        public static float LinearToDB(float linear)
+        {
+            return 20.0f * (float)Math.Log10(linear);
+        }
+
+        /// <summary>
+        /// Converts a DB gain value to its equivalent linear gain (10 ^ (/20))
+        /// </summary>
+        /// <param name="db"></param>
+        /// <returns></returns>
+        public static float DBtoLinear(float db)
+        {
+            return (float)Math.Pow((db / 20.0f), 10);
+        }
     }
 
     public class MBEToneDetector
