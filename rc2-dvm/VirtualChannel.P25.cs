@@ -260,6 +260,11 @@ namespace rc2_dvm
         /// <param name="e"></param>
         private void P25DecodeAudioFrame(byte[] ldu, P25DataReceivedEvent e)
         {
+            // We've received an LDU so reset the rx data timer
+            rxDataTimer.Stop();
+            rxDataTimer.Start();
+
+            // Try to deccode audio
             try
             {
                 // decode 9 IMBE codewords into PCM samples
@@ -367,6 +372,8 @@ namespace rc2_dvm
                 // Start source ID display callback
                 lastSourceId = e.SrcId;
                 sourceIdTimer.Start();
+                // Start RX data timeout timer
+                rxDataTimer.Start();
                 // Status update
                 dvmRadio.StatusCallback();
                 // Log
@@ -385,6 +392,8 @@ namespace rc2_dvm
                 // Stop source ID callback
                 sourceIdTimer.Stop();
                 dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
+                // Stop RX data timeout timer
+                rxDataTimer.Stop();
                 // Status update
                 dvmRadio.StatusCallback();
                 // Log

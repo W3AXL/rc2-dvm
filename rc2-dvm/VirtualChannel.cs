@@ -50,6 +50,9 @@ namespace rc2_dvm
 
         private uint txStreamId;
 
+        // Timer to clear RX state on lack of LDUs
+        private System.Timers.Timer rxDataTimer;
+
         // Variables for displaying active source ID
         private bool showingSourceId;
         private uint lastSourceId;
@@ -167,6 +170,10 @@ namespace rc2_dvm
             sourceIdTimer.Elapsed += sourceIdTimerCallback;
             //sourceIdTimer.Enabled = true;
 
+            // Init rx data timeout timer
+            rxDataTimer = new System.Timers.Timer(1000);
+            rxDataTimer.Elapsed += rxDataTimeout;
+
             // Init filters for TX & RX audio
             float high_cutoff = (float)Config.AudioConfig.AudioHighCut / (float)waveFormat.SampleRate;
             txAudioFilter = new LowPassFilter(high_cutoff, 8);
@@ -253,6 +260,11 @@ namespace rc2_dvm
             dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
         }
 
+        /// <summary>
+        /// Callback to alternate between TG name and source ID
+        /// </summary>
+        /// <param name="source"></param>
+        /// <param name="e"></param>
         private void sourceIdTimerCallback(Object source, ElapsedEventArgs e)
         {
             if (showingSourceId)
@@ -267,6 +279,17 @@ namespace rc2_dvm
                 dvmRadio.StatusCallback();
                 showingSourceId = true;
             }
+        }
+
+        /// <summary>
+        /// Function called when the rx data timeout timer is hit, will force-reset the call data on loss of LDUs
+        /// </summary>
+        /// <param name="source"></param>
+        /// <param name="e"></param>
+        private void rxDataTimeout(Object source, ElapsedEventArgs e)
+        {
+            Log.Logger.Warning("RX data timeout, resetting call");
+            resetCall();
         }
 
         /// <summary>
@@ -383,6 +406,8 @@ namespace rc2_dvm
         {
             // Stop source ID callback
             sourceIdTimer.Stop();
+            // Stop rx data timeout timer
+            rxDataTimer.Stop();
             // Update status
             dvmRadio.Status.State = RadioState.Idle;
             ignoreCall = false;
