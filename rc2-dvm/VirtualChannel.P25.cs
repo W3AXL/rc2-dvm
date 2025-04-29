@@ -27,7 +27,15 @@ namespace rc2_dvm
         private byte p25N = 0;
 
         private bool ignoreCall = false;
+        
+        // Encryption params
         private byte callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
+        private ushort callKeyId = 0;
+
+        // Crypto handler
+        P25Crypto crypto = new P25Crypto();
+
+        private byte[] callMi = new byte[P25Defines.P25_MI_LENGTH];
 
         private static short[] silence = new short[FneSystemBase.MBE_SAMPLES_LENGTH];
 
@@ -142,6 +150,43 @@ namespace rc2_dvm
                 waveProvider.AddSamples(pcm2, 0, pcm2.Length);
             }
 #else
+            // Encrypt call if encryption selected or strapped
+            if (CurrentTalkgroup.Strapped || Secure)
+            {
+                // KEYFAIL if keys aren't loaded
+                if (!loadedKeys.ContainsKey(CurrentTalkgroup.KeyId))
+                {
+                    Log.Logger.Error("({0:l}) KEYFAIL: {TG} ({TGID}) configured for missing Key ID {id}", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId, CurrentTalkgroup.KeyId);
+                    return;
+                }
+
+                // Set up initial MI
+                if (p25N == 0)
+                {
+                    if (callMi.All(b => b == 0))
+                    {
+                        Random random = new Random();
+
+                        for (int i = 0; i < P25Defines.P25_MI_LENGTH; i++)
+                        {
+                            callMi[i] = (byte)random.Next(0x00, 0x100);
+                        }
+                    }
+
+                    crypto.Prepare(CurrentTalkgroup.AlgId, CurrentTalkgroup.KeyId, callMi);
+                }
+
+                // Encrypt
+                crypto.Process(imbe, p25N < 9U ? P25DUID.LDU1 : P25DUID.LDU2);
+
+                // Prepare a new MI on last block of LDU2
+                if (p25N == 17U)
+                {
+                    P25Crypto.CycleP25Lfsr(callMi);
+                    crypto.Prepare(CurrentTalkgroup.AlgId, CurrentTalkgroup.KeyId, callMi);
+                }
+            }
+            
             // fill the LDU buffers appropriately
             switch (p25N)
             {
@@ -212,6 +257,15 @@ namespace rc2_dvm
                 LCO = P25Defines.LC_GROUP
             };
 
+            // Setup crypto params
+            CryptoParams cryptoParams = new CryptoParams();
+            if (CurrentTalkgroup.AlgId != P25Defines.P25_ALGO_UNENCRYPT && CurrentTalkgroup.KeyId > 0 && (CurrentTalkgroup.Strapped || Secure))
+            {
+                cryptoParams.AlgoId = CurrentTalkgroup.AlgId;
+                cryptoParams.KeyId = CurrentTalkgroup.KeyId;
+                Array.Copy(callMi, cryptoParams.MI, P25Defines.P25_MI_LENGTH);
+            }
+
             // send P25 LDU1
             if (p25N == 8U)
             {
@@ -221,10 +275,10 @@ namespace rc2_dvm
                 else
                     pktSeq = peer.pktSeq();
 
-                Log.Logger.Information($"({Config.Name}) P25D: Traffic *VOICE FRAME    * PEER {RC2DVM.fneSystem.PeerId} SRC_ID {srcId} TGID {dstId} [STREAM ID {txStreamId}]");
+                Log.Logger.Information("({0:l}) P25D: Traffic *VOICE FRAME LDU1* PEER {1} SRC_ID {2} TGID {3} [STREAM ID {4}]", Config.Name, RC2DVM.fneSystem.PeerId, srcId, dstId, txStreamId);
 
                 byte[] payload = new byte[200];
-                RC2DVM.fneSystem.CreateNewP25MessageHdr((byte)P25DUID.LDU1, callData, ref payload);
+                RC2DVM.fneSystem.CreateP25MessageHdr((byte)P25DUID.LDU1, callData, ref payload, cryptoParams);
                 RC2DVM.fneSystem.CreateP25LDU1Message(netLDU1, ref payload, srcId, dstId);
 
                 peer.SendMaster(new Tuple<byte, byte>(Constants.NET_FUNC_PROTOCOL, Constants.NET_PROTOCOL_SUBFUNC_P25), payload, pktSeq, txStreamId);
@@ -239,11 +293,11 @@ namespace rc2_dvm
                 else
                     pktSeq = peer.pktSeq();
 
-                Log.Logger.Information($"({Config.Name}) P25D: Traffic *VOICE FRAME    * PEER {RC2DVM.fneSystem.PeerId} SRC_ID {srcId} TGID {dstId} [STREAM ID {txStreamId}]");
+                Log.Logger.Information("({0:l}) P25D: Traffic *VOICE FRAME LDU2* PEER {1} SRC_ID {2} TGID {3} [STREAM ID {4}]", Config.Name, RC2DVM.fneSystem.PeerId, srcId, dstId, txStreamId);
 
                 byte[] payload = new byte[200];
-                RC2DVM.fneSystem.CreateNewP25MessageHdr((byte)P25DUID.LDU2, callData, ref payload);
-                RC2DVM.fneSystem.CreateP25LDU2Message(netLDU2, ref payload);
+                RC2DVM.fneSystem.CreateP25MessageHdr((byte)P25DUID.LDU2, callData, ref payload, cryptoParams);
+                RC2DVM.fneSystem.CreateP25LDU2Message(netLDU2, ref payload, cryptoParams);
 
                 peer.SendMaster(new Tuple<byte, byte>(Constants.NET_FUNC_PROTOCOL, Constants.NET_PROTOCOL_SUBFUNC_P25), payload, pktSeq, txStreamId);
             }
@@ -258,7 +312,7 @@ namespace rc2_dvm
         /// </summary>
         /// <param name="ldu"></param>
         /// <param name="e"></param>
-        private void P25DecodeAudioFrame(byte[] ldu, P25DataReceivedEvent e)
+        private void P25DecodeAudioFrame(byte[] ldu, P25DataReceivedEvent e, P25DUID duid = P25DUID.LDU1)
         {
             // We've received an LDU so reset the rx data timer
             rxDataTimer.Stop();
@@ -305,6 +359,10 @@ namespace rc2_dvm
                     //Log.Logger.Debug($"Decoding IMBE buffer: {FneUtils.HexDump(imbe)}");
 
                     short[] samples = new short[FneSystemBase.MBE_SAMPLES_LENGTH];
+
+                    // Run through crypter
+                    crypto.Process(imbe, duid);
+
                     int errs = 0;
 #if WIN32
                     if (extFullRateVocoder != null)
@@ -319,6 +377,11 @@ namespace rc2_dvm
                         //Log.Logger.Debug($"({Config.Name}) P25D: Traffic *VOICE FRAME    * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} VC{n} ERRS {errs} [STREAM ID {e.StreamId}]");
                         //Log.Logger.Debug($"IMBE {FneUtils.HexDump(imbe)}");
                         //Log.Logger.Debug($"SAMPLE BUFFER {FneUtils.HexDump(samples)}");
+
+                        if (errs != 0)
+                        {
+                            Log.Logger.Warning("({0:l}) P25D: Decode Errors: {errs}", errs);
+                        }
 
                         // Convert to floats
                         float[] fSamples = Utils.PcmToFloat(samples);
@@ -361,14 +424,62 @@ namespace rc2_dvm
             for (int i = 24; i < len; i++)
                 data[i - 24] = e.Data[i];
 
+            // if this is an LDU1 see if this is the first LDU with HDU encryption data
+            if (e.DUID == P25DUID.LDU1 && !ignoreCall)
+            {
+                byte frameType = e.Data[180];
+                if (frameType == P25Defines.P25_FT_HDU_VALID)
+                {
+                    // Get Alg & KID
+                    callAlgoId = e.Data[181];
+                    callKeyId = (ushort)(e.Data[182] << 8 | e.Data[183]);
+                    // Copy MI
+                    Array.Copy(e.Data, 184, callMi, 0, P25Defines.P25_MI_LENGTH);
+                    
+                    // Validate key
+                    if (Config.StrictKeyMapping && callKeyId != CurrentTalkgroup.KeyId)
+                    {
+                        Log.Logger.Warning("({0:l}) P25D: Ignoring traffic for non-matching key ID 0x{keyID:X4}", Config.Name, callKeyId);
+                        ignoreCall = true;
+                    }
+                    else if (!loadedKeys.ContainsKey(callKeyId))
+                    {
+                        Log.Logger.Warning("({0:l}) P25D: Ignoring traffic for missing key ID 0x{keyID:X4}", Config.Name, callKeyId);
+                        ignoreCall = true;
+                    }
+                    else
+                    {
+                        // Set Key
+                        crypto.SetKey(callKeyId, callAlgoId, loadedKeys[callKeyId].GetKey());
+                        // Set up crypto engine
+                        crypto.Prepare(callAlgoId, callKeyId, callMi);
+                        Log.Logger.Debug("({0:l}) Preparing decryption for Key ID {keyID:X4} ({algo:l})", Config.Name, CurrentTalkgroup.KeyId, Enum.GetName(typeof(Algorithm), CurrentTalkgroup.AlgId));
+                    }
+                    
+                }
+            }
+
             // is this a new call stream?
             if (e.StreamId != status[FneSystemBase.P25_FIXED_SLOT].RxStreamId && ((e.DUID != P25DUID.TDU) && (e.DUID != P25DUID.TDULC)))
             {
                 callInProgress = true;
-                callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
                 status[FneSystemBase.P25_FIXED_SLOT].RxStart = pktTime;
-                // Update state
-                dvmRadio.Status.State = rc2_core.RadioState.Receiving;
+                
+                // Clear MI
+                FneUtils.Memset(callMi, 0x00, P25Defines.P25_MI_LENGTH);
+                
+                // Fix incorrect algo/key IDs
+                if (callAlgoId == 0 && callKeyId == 0)
+                {
+                    callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
+                }
+                
+                // Update state depending on ecryption status
+                if (callAlgoId != P25Defines.P25_ALGO_UNENCRYPT)
+                    dvmRadio.Status.State = rc2_core.RadioState.Encrypted;
+                else
+                    dvmRadio.Status.State = rc2_core.RadioState.Receiving;
+                
                 // Start source ID display callback
                 lastSourceId = e.SrcId;
                 sourceIdTimer.Start();
@@ -376,16 +487,26 @@ namespace rc2_dvm
                 rxDataTimer.Start();
                 // Status update
                 dvmRadio.StatusCallback();
+                
                 // Log
-                Log.Logger.Information($"({Config.Name}) P25D: Traffic *CALL START     * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} [STREAM ID {e.StreamId}]");
+                if (callAlgoId != P25Defines.P25_ALGO_UNENCRYPT)
+                {
+                    Log.Logger.Information("({0:l}) P25D: Traffic *ENC CALL START* PEER {1} SRC_ID {2} TGID {3} ALGO {4:l} KEY 0x{5:X4} [STREAM ID {6}]", Config.Name, e.PeerId, e.SrcId, e.DstId, Enum.GetName(typeof(Algorithm), callAlgoId), callKeyId, e.StreamId);
+                }
+                else
+                {
+                    Log.Logger.Information("({0:l}) P25D: Traffic *CALL START    * PEER {1} SRC_ID {2} TGID {3} [STREAM ID {4}]", Config.Name, e.PeerId, e.SrcId, e.DstId, e.StreamId);
+                }
+                
             }
 
             // Is the call over?
             if (((e.DUID == P25DUID.TDU) || (e.DUID == P25DUID.TDULC)) && (status[FneSystemBase.P25_FIXED_SLOT].RxType != FrameType.TERMINATOR))
             {
+                // Reset flags
                 ignoreCall = false;
-                callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
                 callInProgress = false;
+                callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
                 TimeSpan callDuration = pktTime - status[FneSystemBase.P25_FIXED_SLOT].RxStart;
                 // Update state
                 dvmRadio.Status.State = rc2_core.RadioState.Idle;
@@ -404,21 +525,13 @@ namespace rc2_dvm
             if (ignoreCall && callAlgoId == P25Defines.P25_ALGO_UNENCRYPT)
                 ignoreCall = false;
 
-            // if this is an LDU1 see if this is the first LDU with HDU encryption data
-            if (e.DUID == P25DUID.LDU1 && !ignoreCall)
-            {
-                byte frameType = e.Data[180];
-                if (frameType == P25Defines.P25_FT_HDU_VALID)
-                    callAlgoId = e.Data[181];
-            }
-
             if (e.DUID == P25DUID.LDU2 && !ignoreCall)
                 callAlgoId = data[88];
 
             if (ignoreCall)
                 return;
 
-            if (callAlgoId != P25Defines.P25_ALGO_UNENCRYPT)
+            /*if (callAlgoId != P25Defines.P25_ALGO_UNENCRYPT)
             {
                 if (status[FneSystemBase.P25_FIXED_SLOT].RxType != FrameType.TERMINATOR)
                 {
@@ -432,20 +545,30 @@ namespace rc2_dvm
 
                 ignoreCall = true;
                 return;
-            }
+            }*/
 
             // At this point we chan check for late entry
             if (!ignoreCall && !callInProgress)
             {
                 callInProgress = true;
-                callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
+                //callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
                 status[FneSystemBase.P25_FIXED_SLOT].RxStart = pktTime;
                 // Update status
                 dvmRadio.Status.State = rc2_core.RadioState.Receiving;
                 dvmRadio.StatusCallback();
                 // Log
-                Log.Logger.Information($"({Config.Name}) P25D: Traffic *CALL LATE START* PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} [STREAM ID {e.StreamId}]");
+                if (callAlgoId != P25Defines.P25_ALGO_UNENCRYPT)
+                {
+                    Log.Logger.Information("({0}) P25D: Traffic *ENC CALL LATE START* PEER {1} SRC_ID {2} TGID {3} ALGO {4:l} KEY 0x{5:X4} [STREAM ID {6}]", Config.Name, e.PeerId, e.SrcId, e.DstId, Enum.GetName(typeof(Algorithm), callAlgoId), callKeyId, e.StreamId);
+                }
+                else
+                {
+                    Log.Logger.Information("({0}) P25D: Traffic *CALL LATE START    * PEER {1} SRC_ID {2} TGID {3} [STREAM ID {4}]", Config.Name, e.PeerId, e.SrcId, e.DstId, e.StreamId);
+                }
             }
+
+            // New MI data
+            byte[] newMI = new byte[P25Defines.P25_MI_LENGTH];
 
             int count = 0;
             switch (e.DUID)
@@ -496,7 +619,7 @@ namespace rc2_dvm
                             count += 16;
 
                             // decode 9 IMBE codewords into PCM samples
-                            P25DecodeAudioFrame(netLDU1, e);
+                            P25DecodeAudioFrame(netLDU1, e, P25DUID.LDU1);
                         }
                     }
                     break;
@@ -519,18 +642,29 @@ namespace rc2_dvm
 
                             // The '6D' record - IMBE Voice 12 + Encryption Sync
                             Buffer.BlockCopy(data, count, netLDU2, 50, 17);
+                            newMI[0] = data[count + 1];
+                            newMI[1] = data[count + 2];
+                            newMI[2] = data[count + 3];
                             count += 17;
 
                             // The '6E' record - IMBE Voice 13 + Encryption Sync
                             Buffer.BlockCopy(data, count, netLDU2, 75, 17);
+                            newMI[3] = data[count + 1];
+                            newMI[4] = data[count + 2];
+                            newMI[5] = data[count + 3];
                             count += 17;
 
                             // The '6F' record - IMBE Voice 14 + Encryption Sync
                             Buffer.BlockCopy(data, count, netLDU2, 100, 17);
+                            newMI[6] = data[count + 1];
+                            newMI[7] = data[count + 2];
+                            newMI[8] = data[count + 3];
                             count += 17;
 
                             // The '70' record - IMBE Voice 15 + Encryption Sync
                             Buffer.BlockCopy(data, count, netLDU2, 125, 17);
+                            callAlgoId = data[count + 1];
+                            callKeyId = (ushort)((data[count + 2] << 8) | data[count + 3]);
                             count += 17;
 
                             // The '71' record - IMBE Voice 16 + Encryption Sync
@@ -545,12 +679,19 @@ namespace rc2_dvm
                             Buffer.BlockCopy(data, count, netLDU2, 200, 16);
                             count += 16;
 
+                            // TODO: Actually detect errors and use LFSR instead of just copying the MI
+                            Array.Copy(newMI, callMi, P25Defines.P25_MI_LENGTH);
+
                             // decode 9 IMBE codewords into PCM samples
-                            P25DecodeAudioFrame(netLDU2, e);
+                            P25DecodeAudioFrame(netLDU2, e, P25DUID.LDU2);
                         }
                     }
                     break;
             }
+
+            // Prepare the crypto processor
+            if (callMi != null)
+                crypto.Prepare(callAlgoId, callKeyId, callMi);
 
             status[FneSystemBase.P25_FIXED_SLOT].RxRFS = e.SrcId;
             status[FneSystemBase.P25_FIXED_SLOT].RxType = e.FrameType;

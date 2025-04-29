@@ -16,6 +16,7 @@ using Microsoft.VisualBasic;
 using SIPSorcery.Media;
 using SIPSorcery.Sys;
 using NAudio.Wave;
+using fnecore.P25.KMM;
 
 namespace rc2_dvm
 {
@@ -193,6 +194,22 @@ namespace rc2_dvm
         protected override void PeerConnected(object sender, PeerConnectedEvent e)
         {
             return;
+        }
+
+        /// <summary>
+        /// KMM Key response handler from FNE
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        /// <exception cref="NotImplementedException"></exception>
+        protected override void KeyResponse(object sender, KeyResponseEvent e)
+        {
+            byte[] payload = e.Data.Skip(11).ToArray();
+            if (e.MessageId == (byte)KmmMessageType.MODIFY_KEY_CMD)
+                foreach (VirtualChannel channel in RC2DVM.VirtualChannels)
+                {
+                    channel.KeyResponseReceived(e);
+                }
         }
 
         /// <summary>

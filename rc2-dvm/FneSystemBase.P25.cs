@@ -272,7 +272,8 @@ namespace rc2_dvm
         /// <param name="offset"></param>
         /// <param name="imbe"></param>
         /// <param name="frameType"></param>
-        private void EncodeLDU2(ref byte[] data, int offset, byte[] imbe, byte frameType)
+        /// <param name="cryptoParams">Crypto Parameters</param>
+        private void EncodeLDU2(ref byte[] data, int offset, byte[] imbe, byte frameType, CryptoParams cryptoParams)
         {
             if (data == null)
                 throw new ArgumentNullException("data");
@@ -328,33 +329,32 @@ namespace rc2_dvm
                     break;
                 case P25DFSI.P25_DFSI_LDU2_VOICE12:
                     {
-                        dfsiFrame[1U] = 0;                                                  // Message Indicator
-                        dfsiFrame[2U] = 0;
-                        dfsiFrame[3U] = 0;
+                        dfsiFrame[1U] = cryptoParams.MI[0];                                                  // Message Indicator
+                        dfsiFrame[2U] = cryptoParams.MI[1];
+                        dfsiFrame[3U] = cryptoParams.MI[2];
                         Buffer.BlockCopy(imbe, 0, dfsiFrame, 5, IMBE_BUF_LEN);              // IMBE
                     }
                     break;
                 case P25DFSI.P25_DFSI_LDU2_VOICE13:
                     {
-                        dfsiFrame[1U] = 0;                                                  // Message Indicator
-                        dfsiFrame[2U] = 0;
-                        dfsiFrame[3U] = 0;
+                        dfsiFrame[1U] = cryptoParams.MI[3];                                                  // Message Indicator
+                        dfsiFrame[2U] = cryptoParams.MI[4];
+                        dfsiFrame[3U] = cryptoParams.MI[5];
                         Buffer.BlockCopy(imbe, 0, dfsiFrame, 5, IMBE_BUF_LEN);              // IMBE
                     }
                     break;
                 case P25DFSI.P25_DFSI_LDU2_VOICE14:
                     {
-                        dfsiFrame[1U] = 0;                                                  // Message Indicator
-                        dfsiFrame[2U] = 0;
-                        dfsiFrame[3U] = 0;
+                        dfsiFrame[1U] = cryptoParams.MI[6];                                                  // Message Indicator
+                        dfsiFrame[2U] = cryptoParams.MI[7];
+                        dfsiFrame[3U] = cryptoParams.MI[8];
                         Buffer.BlockCopy(imbe, 0, dfsiFrame, 5, IMBE_BUF_LEN);              // IMBE
                     }
                     break;
                 case P25DFSI.P25_DFSI_LDU2_VOICE15:
                     {
-                        dfsiFrame[1U] = P25Defines.P25_ALGO_UNENCRYPT;                      // Algorithm ID
-                        dfsiFrame[2U] = 0;                                                  // Key ID
-                        dfsiFrame[3U] = 0;
+                        dfsiFrame[1U] = cryptoParams.AlgoId;                                // Algorithm ID
+                        FneUtils.WriteBytes(cryptoParams.KeyId, ref dfsiFrame, 2);          // Key ID
                         Buffer.BlockCopy(imbe, 0, dfsiFrame, 5, IMBE_BUF_LEN);              // IMBE
                     }
                     break;
@@ -399,46 +399,52 @@ namespace rc2_dvm
         /// </summary>
         /// <param name="netLDU2">Input LDU data array</param>
         /// <param name="data">Output data array</param>
-        public void CreateP25LDU2Message(in byte[] netLDU2, ref byte[] data)
+        /// <param name="cryptoParams">Crypto Parameters</param>
+        public void CreateP25LDU2Message(in byte[] netLDU2, ref byte[] data, CryptoParams cryptoParams = null)
         {
+            if (cryptoParams == null)
+            {
+                cryptoParams = new CryptoParams();
+            }
+
             // pack DFSI data
             int count = P25_MSG_HDR_SIZE;
             byte[] imbe = new byte[IMBE_BUF_LEN];
 
             Buffer.BlockCopy(netLDU2, 10, imbe, 0, IMBE_BUF_LEN);
-            EncodeLDU2(ref data, 24, imbe, P25DFSI.P25_DFSI_LDU2_VOICE10);
+            EncodeLDU2(ref data, 24, imbe, P25DFSI.P25_DFSI_LDU2_VOICE10, cryptoParams);
             count += (int)P25DFSI.P25_DFSI_LDU2_VOICE10_FRAME_LENGTH_BYTES;
 
             Buffer.BlockCopy(netLDU2, 26, imbe, 0, IMBE_BUF_LEN);
-            EncodeLDU2(ref data, 46, imbe, P25DFSI.P25_DFSI_LDU2_VOICE11);
+            EncodeLDU2(ref data, 46, imbe, P25DFSI.P25_DFSI_LDU2_VOICE11, cryptoParams);
             count += (int)P25DFSI.P25_DFSI_LDU2_VOICE11_FRAME_LENGTH_BYTES;
 
             Buffer.BlockCopy(netLDU2, 55, imbe, 0, IMBE_BUF_LEN);
-            EncodeLDU2(ref data, 60, imbe, P25DFSI.P25_DFSI_LDU2_VOICE12);
+            EncodeLDU2(ref data, 60, imbe, P25DFSI.P25_DFSI_LDU2_VOICE12, cryptoParams);
             count += (int)P25DFSI.P25_DFSI_LDU2_VOICE12_FRAME_LENGTH_BYTES;
 
             Buffer.BlockCopy(netLDU2, 80, imbe, 0, IMBE_BUF_LEN);
-            EncodeLDU2(ref data, 77, imbe, P25DFSI.P25_DFSI_LDU2_VOICE13);
+            EncodeLDU2(ref data, 77, imbe, P25DFSI.P25_DFSI_LDU2_VOICE13, cryptoParams);
             count += (int)P25DFSI.P25_DFSI_LDU2_VOICE13_FRAME_LENGTH_BYTES;
 
             Buffer.BlockCopy(netLDU2, 105, imbe, 0, IMBE_BUF_LEN);
-            EncodeLDU2(ref data, 94, imbe, P25DFSI.P25_DFSI_LDU2_VOICE14);
+            EncodeLDU2(ref data, 94, imbe, P25DFSI.P25_DFSI_LDU2_VOICE14, cryptoParams);
             count += (int)P25DFSI.P25_DFSI_LDU2_VOICE14_FRAME_LENGTH_BYTES;
 
             Buffer.BlockCopy(netLDU2, 130, imbe, 0, IMBE_BUF_LEN);
-            EncodeLDU2(ref data, 111, imbe, P25DFSI.P25_DFSI_LDU2_VOICE15);
+            EncodeLDU2(ref data, 111, imbe, P25DFSI.P25_DFSI_LDU2_VOICE15, cryptoParams);
             count += (int)P25DFSI.P25_DFSI_LDU2_VOICE15_FRAME_LENGTH_BYTES;
 
             Buffer.BlockCopy(netLDU2, 155, imbe, 0, IMBE_BUF_LEN);
-            EncodeLDU2(ref data, 128, imbe, P25DFSI.P25_DFSI_LDU2_VOICE16);
+            EncodeLDU2(ref data, 128, imbe, P25DFSI.P25_DFSI_LDU2_VOICE16, cryptoParams);
             count += (int)P25DFSI.P25_DFSI_LDU2_VOICE16_FRAME_LENGTH_BYTES;
 
             Buffer.BlockCopy(netLDU2, 180, imbe, 0, IMBE_BUF_LEN);
-            EncodeLDU2(ref data, 145, imbe, P25DFSI.P25_DFSI_LDU2_VOICE17);
+            EncodeLDU2(ref data, 145, imbe, P25DFSI.P25_DFSI_LDU2_VOICE17, cryptoParams);
             count += (int)P25DFSI.P25_DFSI_LDU2_VOICE17_FRAME_LENGTH_BYTES;
 
             Buffer.BlockCopy(netLDU2, 204, imbe, 0, IMBE_BUF_LEN);
-            EncodeLDU2(ref data, 162, imbe, P25DFSI.P25_DFSI_LDU2_VOICE18);
+            EncodeLDU2(ref data, 162, imbe, P25DFSI.P25_DFSI_LDU2_VOICE18, cryptoParams);
             count += (int)P25DFSI.P25_DFSI_LDU2_VOICE18_FRAME_LENGTH_BYTES;
 
             data[23U] = (byte)count;

@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 using fnecore;
+using fnecore.P25;
 
 namespace rc2_dvm
 {
@@ -90,6 +91,16 @@ namespace rc2_dvm
     }
 
     /// <summary>
+    /// Types of encryption algos
+    /// </summary>
+    public enum Algorithm : byte
+    {
+        DES     = P25Defines.P25_ALGO_DES,
+        AES     = P25Defines.P25_ALGO_AES,
+        ARC4    = P25Defines.P25_ALGO_ARC4,
+    }
+
+    /// <summary>
     /// Class representing a system talkgroup
     /// </summary>
     public class TalkgroupConfigObject
@@ -106,6 +117,18 @@ namespace rc2_dvm
         /// Talkgroup Name
         /// </summary>
         public string Name;
+        /// <summary>
+        /// Talkgroup encryption algorithm
+        /// </summary>
+        public byte AlgId = P25Defines.P25_ALGO_UNENCRYPT;
+        /// <summary>
+        /// Encryption key ID
+        /// </summary>
+        public ushort KeyId = 0;
+        /// <summary>
+        /// Encryption strapped or toglable
+        /// </summary>
+        public bool Strapped = false;
     }
 
     /// <summary>
@@ -153,6 +176,10 @@ namespace rc2_dvm
         /// Whether to send grant demands on call start
         /// </summary>
         public bool TxGrantDemands = false;
+        /// <summary>
+        /// Whether to only pass RX traffic for the configured key and not any key
+        /// </summary>
+        public bool StrictKeyMapping = true;
     }
 
     /// <summary>
@@ -206,6 +233,14 @@ namespace rc2_dvm
         public bool Debug = false;
     }
 
+    public class EncryptionConfigObject
+    {
+        /// <summary>
+        /// Full path to the plaintext encryption file
+        /// </summary>
+        public string KeyFile = "";
+    }
+
     public class ConfigObject
     {
         /// <summary>
@@ -216,6 +251,10 @@ namespace rc2_dvm
         /// Network Config
         /// </summary>
         public NetworkConfigObject Network = new NetworkConfigObject();
+        /// <summary>
+        /// Encryption Config
+        /// </summary>
+        public EncryptionConfigObject Encryption = new EncryptionConfigObject();
         /// <summary>
         /// Configured Virtual Channels
         /// </summary>

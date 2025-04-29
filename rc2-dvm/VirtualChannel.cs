@@ -1,6 +1,7 @@
 ﻿using fnecore;
 using fnecore.DMR;
 using fnecore.P25;
+using fnecore.P25.KMM;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 using Serilog;
@@ -21,6 +22,7 @@ using NAudio.Dsp;
 using NWaves.Signals;
 using NWaves.Signals.Builders;
 using NWaves.Signals.Builders.Base;
+using Org.BouncyCastle.Asn1;
 
 namespace rc2_dvm
 {
@@ -76,6 +78,11 @@ namespace rc2_dvm
         public bool Scanning { get { return scanning; } }
 
         /// <summary>
+        /// State variable to keep track of whether secure is turned on or off
+        /// </summary>
+        public bool Secure = false;
+
+        /// <summary>
         /// Index of the currently selected talkgroup for this channel
         /// </summary>
         private int currentTgIdx = 0;
@@ -84,6 +91,16 @@ namespace rc2_dvm
         /// Timer to trigger an affiliation after a delay
         /// </summary>
         private System.Timers.Timer affHoldoffTimer;
+
+        /// <summary>
+        /// Key container opened by program
+        /// </summary>
+        private KeyContainer keyContainer;
+
+        /// <summary>
+        /// Currently loaded encryption keys
+        /// </summary>
+        private Dictionary<ushort, KeyItem> loadedKeys = [];
 
         /// <summary>
         /// Currently selected talkgroup for this channel
@@ -100,13 +117,16 @@ namespace rc2_dvm
         /// Creates a new instance of a virtual channel
         /// </summary>
         /// <param name="config"></param>
-        public VirtualChannel(VirtualChannelConfigObject config)
+        public VirtualChannel(VirtualChannelConfigObject config, KeyContainer keyContainer)
         {
             // Store channel configuration
             Config = config;
 
             // Whether to use external AMBE library
             bool externalAmbe = false;
+
+            // Store encryption settings
+            this.keyContainer = keyContainer;
 
 #if WIN32
             // Try to find external AMBE.DLL interop library
@@ -205,19 +225,16 @@ namespace rc2_dvm
                 affHoldoffTimer.Enabled = false;
             }
                 
-
             // initialize slot statuses
             status = new SlotStatus[3];
             status[0] = new SlotStatus();  // DMR Slot 1
             status[1] = new SlotStatus();  // DMR Slot 2
             status[2] = new SlotStatus();  // P25
-
             
-            
-            Log.Logger.Information("Configured virtual channel {name}", Config.Name);
-            Log.Logger.Information("    Mode: {mode}",Config.Mode);
+            // Configuration log prints
+            Log.Logger.Information("Configured virtual channel {name:l}", Config.Name);
             Log.Logger.Information("    Source ID: {SourceId}", Config.SourceId);
-            Log.Logger.Information("    Listening on: {ListenAddress}:{ListenPort}", Config.ListenAddress, Config.ListenPort);
+            Log.Logger.Information("    Listening on: {ListenAddress:l}:{ListenPort}", Config.ListenAddress, Config.ListenPort);
             Log.Logger.Information("    Audio Config:");
             Log.Logger.Information("        Audio Lowpass:       {AudioHighCut} Hz", Config.AudioConfig.AudioHighCut);
             Log.Logger.Information("        RX Audio Gain:       {RxAudioGain}", Config.AudioConfig.RxAudioGain);
@@ -233,17 +250,21 @@ namespace rc2_dvm
                 Log.Logger.Information("        TX Tone Hits:        {Config.AudioConfig.TxToneHits}", Config.AudioConfig.TxToneHits);
                 Log.Logger.Information("        TX Tone Valid Range: {TxToneLowerLimit} Hz to {TxToneUpperLimit} Hz", Config.AudioConfig.TxToneLowerLimit, Config.AudioConfig.TxToneUpperLimit);
             }
-            Log.Logger.Information("    Mode: {Mode}", Config.Mode.ToString());
+            Log.Logger.Information("    Mode: {Mode:l}", Config.Mode.ToString());
+            
             Log.Logger.Information("    Talkgroups ({TGCount}):", Config.Talkgroups.Count);
             foreach (TalkgroupConfigObject talkgroup in Config.Talkgroups)
             {
+                string encStr = "";
+                if (talkgroup.AlgId != P25Defines.P25_ALGO_UNENCRYPT && talkgroup.KeyId != 0)
+                    encStr = $", {Enum.GetName(typeof(Algorithm), talkgroup.AlgId)} Key ID {talkgroup.KeyId}, {(talkgroup.Strapped ? "STRAPPED" : "SELECTABLE")}";
                 if (Config.Mode == VocoderMode.DMR)
                 {
-                    Log.Logger.Information("        TGID {DestinationId} TS {Timeslot} ({Name})", talkgroup.DestinationId, talkgroup.Timeslot, talkgroup.Name);
+                    Log.Logger.Information("        TGID {DestinationId} TS {Timeslot} ({Name:l}){Enc:l}", talkgroup.DestinationId, talkgroup.Timeslot, talkgroup.Name, encStr);
                 }
                 else
                 {
-                    Log.Logger.Information("        TGID {DestinationId} ({Name})", talkgroup.DestinationId, talkgroup.Name);
+                    Log.Logger.Information("        TGID {DestinationId} ({Name:l}){Enc:l}", talkgroup.DestinationId, talkgroup.Name, encStr);
                 }    
             }
 
@@ -330,7 +351,6 @@ namespace rc2_dvm
             {
                 // Increment channel
                 currentTgIdx++;
-                Log.Logger.Debug($"({Config.Name}) Selected TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
                 // Update Status
                 dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
                 // Reset any active calls
@@ -339,8 +359,10 @@ namespace rc2_dvm
                 resetAffTimer();
                 // Send status update
                 dvmRadio.StatusCallback();
-                // Return success
-                return true;
+                // Log
+                Log.Logger.Debug($"({Config.Name}) Selected TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
+                // Return channel setup success
+                return SetupChannel();
             }
         }
 
@@ -360,19 +382,93 @@ namespace rc2_dvm
             {
                 // Decrement channel
                 currentTgIdx--;
-                Log.Logger.Debug($"({Config.Name}) Selected TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
                 // Update Status
                 dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
                 // Reset any active calls
                 resetCall();
                 // Restart affiliation timer
                 resetAffTimer();
-                // Send status update
-                dvmRadio.StatusCallback();
-                // Return success
-                return true;
+                // Log
+                Log.Logger.Debug($"({Config.Name}) Selected TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
+                // Return channel setup success
+                return SetupChannel();
             }
             else { return false; }
+        }
+
+        /// <summary>
+        /// Callback when a new channel is selected (handles configuration of encryption, etc)
+        /// </summary>
+        public bool SetupChannel()
+        {
+            // Setup encryption if configured
+            if (CurrentTalkgroup.AlgId != P25Defines.P25_ALGO_UNENCRYPT)
+            {
+                // Ensure key ID is set
+                if (CurrentTalkgroup.KeyId == 0)
+                {
+                    Log.Logger.Error("KEYFAIL: {TG} ({TGID}) is configured for encryption but has Key ID 0", CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
+                    return false;
+                }
+                // Load the key if it's not loaded already
+                if (!loadedKeys.ContainsKey(CurrentTalkgroup.KeyId))
+                {
+                    // Try to get the key from the local file
+                    KeyItem key = keyContainer.GetKeyById(CurrentTalkgroup.KeyId);
+                    if (key != null)
+                    {
+                        Log.Logger.Information("Loaded Key ID 0x{KeyId:X4} ({Algo:l}) from keyfile into local keystore", key.KeyId, Enum.GetName(typeof(Algorithm), key.KeyFormat));
+                        loadedKeys[key.KeyId] = key;
+                    }
+                    // Request from FNE as a fallback
+                    else
+                    {
+                        Log.Logger.Information("Key ID 0x{keyId:X4} not found in local keyfile, requesting from FNE", CurrentTalkgroup.KeyId);
+                        RC2DVM.fneSystem.peer.SendMasterKeyRequest(CurrentTalkgroup.AlgId, CurrentTalkgroup.KeyId);
+                    }
+                }
+            }
+
+            // Update softkeys and states
+            if (CurrentTalkgroup.Strapped || Secure)
+            {
+                // Update status
+                dvmRadio.Status.Secure = true;
+                // Update softkey
+                int keyIdx = dvmRadio.Status.Softkeys.FindIndex(key => key.Name == SoftkeyName.SEC);
+                dvmRadio.Status.Softkeys[keyIdx].State = SoftkeyState.On;
+            }
+            else
+            {
+                // Update status
+                dvmRadio.Status.Secure = false;
+                // Update softkey
+                int keyIdx = dvmRadio.Status.Softkeys.FindIndex(key => key.Name == SoftkeyName.SEC);
+                dvmRadio.Status.Softkeys[keyIdx].State = SoftkeyState.Off;
+            }
+
+            // Send status update
+            dvmRadio.StatusCallback();
+
+            // Return true if nothing failed
+            return true;
+        }
+
+        /// <summary>
+        /// Handler for FNE key response
+        /// </summary>
+        /// <param name="e"></param>
+        public void KeyResponseReceived(KeyResponseEvent e)
+        {
+            // Add any received keys to the local keystore, unless they already exist
+            foreach(KeyItem key in e.KmmKey.KeysetItem.Keys)
+            {
+                if (!loadedKeys.ContainsKey(key.KeyId))
+                {
+                    loadedKeys[key.KeyId] = key;
+                    Log.Logger.Information("Loaded Key ID 0x{KeyID:X4} ({Algo}) from FNE KMM into local keystore", key.KeyId, Enum.GetName(typeof(Algorithm), key.KeyFormat));
+                }
+            }
         }
 
         /// <summary>
@@ -412,6 +508,7 @@ namespace rc2_dvm
             dvmRadio.Status.State = RadioState.Idle;
             ignoreCall = false;
             callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
+            FneUtils.Memset(callMi, 0x00, P25Defines.P25_MI_LENGTH);
             callInProgress = false;
         }
 
@@ -474,6 +571,19 @@ namespace rc2_dvm
             // "Grab" the talkgroup
             if (RC2DVM.fneSystem.AddActiveTalkgroup(CurrentTalkgroup.DestinationId, CurrentTalkgroup.Timeslot))
             {
+                
+                // Setup Crypto
+                if (CurrentTalkgroup.KeyId != 0 && (Secure || CurrentTalkgroup.Strapped))
+                {
+                    crypto.SetKey(CurrentTalkgroup.KeyId, CurrentTalkgroup.AlgId, loadedKeys[CurrentTalkgroup.KeyId].GetKey());
+                    Log.Logger.Information($"({Config.Name}) Start ENC TX on TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
+                }
+                else
+                {
+                    //crypto.SetKey(0, P25Defines.P25_ALGO_UNENCRYPT, new byte[1]);
+                    Log.Logger.Information($"({Config.Name}) Start TX on TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
+                }
+
                 // Get new stream ID
                 txStreamId = RC2DVM.fneSystem.NewStreamId();
                 // Send Grant Demand if enabled
@@ -484,8 +594,7 @@ namespace rc2_dvm
                 // Update status to transmitting
                 dvmRadio.Status.State = RadioState.Transmitting;
                 dvmRadio.StatusCallback();
-                // Log
-                Log.Logger.Information($"({Config.Name}) Start TX on TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
+
                 return true;
             } else
             {

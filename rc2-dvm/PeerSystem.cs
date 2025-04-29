@@ -72,9 +72,9 @@ namespace rc2_dvm
             }
 
             Log.Logger.Information("    Peer ID:              {peerId}", RC2DVM.Configuration.Network.PeerId);
-            Log.Logger.Information("    Master Addresss:      {address}", RC2DVM.Configuration.Network.Address);
+            Log.Logger.Information("    Master Addresss:      {address:l}", RC2DVM.Configuration.Network.Address);
             Log.Logger.Information("    Master Port:          {port}", RC2DVM.Configuration.Network.Port);
-            Log.Logger.Information("    Identity:             {identity}", RC2DVM.Configuration.Network.Identity);
+            Log.Logger.Information("    Identity:             {identity:l}", RC2DVM.Configuration.Network.Identity);
             Log.Logger.Information("    Channel Affiliations: {chanaff}", RC2DVM.Configuration.Network.SendChannelAffiliations);
             Log.Logger.Information("    Diagnostic Transfer:  {diagxfer}", RC2DVM.Configuration.Network.AllowDiagnosticTransfer);
             Log.Logger.Information("    Debug:                {debug}", RC2DVM.Configuration.Network.Debug);

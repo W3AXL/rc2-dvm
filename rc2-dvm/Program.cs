@@ -82,6 +82,11 @@ namespace rc2_dvm
         public static List<VirtualChannel> VirtualChannels = new List<VirtualChannel>();
 
         /// <summary>
+        /// Key container used for all virtual channels
+        /// </summary>
+        public static KeyContainer keyContainer = new KeyContainer();
+
+        /// <summary>
         /// Long-format version string
         /// </summary>
         public static readonly string SWVersionLong = $"RC2-DVM v{ThisAssembly.Git.SemVer.Major}.{ThisAssembly.Git.SemVer.Minor}.{ThisAssembly.Git.SemVer.Patch}{ThisAssembly.Git.SemVer.DashLabel} ({ThisAssembly.Git.Commit.ToUpper()})";
@@ -128,7 +133,7 @@ namespace rc2_dvm
 
                         IDeserializer ymlDeserializer = new DeserializerBuilder()
                             .WithNamingConvention(CamelCaseNamingConvention.Instance)
-                            .IgnoreUnmatchedProperties()
+                            //.IgnoreUnmatchedProperties()
                             .Build();
 
                         config = ymlDeserializer.Deserialize<ConfigObject>(yml);
@@ -232,6 +237,26 @@ namespace rc2_dvm
             {
                 Log.Logger.Information("[RC2-DVM] Starting up RC2-DVM services");
 
+                // Load EKC
+                keyContainer = new KeyContainer();
+                if (!string.IsNullOrEmpty(config.Encryption.KeyFile))
+                {
+                    Log.Logger.Information("[RC2-DVM] Loading EKC {file:l}", config.Encryption.KeyFile);
+                    IDeserializer keyDeserializer = new DeserializerBuilder()
+                        .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                        .Build();
+                    keyContainer = keyDeserializer.Deserialize<KeyContainer>(File.ReadAllText(config.Encryption.KeyFile));
+                }
+
+                if (keyContainer.Keys.Count > 0)
+                {
+                    Log.Logger.Information("    Loaded {keys} keys from local keyfile", keyContainer.Keys.Count);
+                    keyContainer.Keys.ForEach((key) =>
+                    {
+                        Log.Logger.Information("        {algo:l} (0x{algoId:X2}) Key ID 0x{keyId:X4}", Enum.GetName(typeof(Algorithm), key.AlgId), key.AlgId, key.KeyId);
+                    });
+                }
+
                 // Instantiate FNE system
                 Log.Logger.Information($"[RC2-DVM] Starting FNE system");
 
@@ -245,7 +270,7 @@ namespace rc2_dvm
                 Log.Logger.Debug($"Creating {Configuration.VirtualChannels.Count} virtual channels");
                 Configuration.VirtualChannels.ForEach(channel =>
                 {
-                    VirtualChannels.Add(new VirtualChannel(channel));
+                    VirtualChannels.Add(new VirtualChannel(channel, keyContainer));
                 });
 
                 // Start

@@ -4,6 +4,8 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
+using Serilog;
+using fnecore.P25;
 using rc2_core;
 using rc2_dvm;
 
@@ -14,7 +16,8 @@ namespace rc2_dvm
         // Fixed softkeys for a DVM channel
         internal static List<SoftkeyName> DVMSoftkeys = new List<SoftkeyName>
         {
-            SoftkeyName.SCAN
+            SoftkeyName.SCAN,
+            SoftkeyName.SEC,
         };
 
         // Talkgroup list
@@ -78,14 +81,44 @@ namespace rc2_dvm
 
         public override bool PressButton(SoftkeyName name)
         {
-            // TODO: translate softkeys into actions
-            return false;
+            switch (name)
+            {
+                case SoftkeyName.SEC:
+                    return true;
+
+                default:
+                    return false;
+            }
         }
 
         public override bool ReleaseButton(SoftkeyName name)
         {
-            // TODO: same as above
-            return false;
+            switch (name)
+            {
+                // Secure button
+                case SoftkeyName.SEC:
+                    // If current talkgroup is strapped, bonk
+                    if (vChannel.CurrentTalkgroup.Strapped)
+                    {
+                        Log.Logger.Warning("Talkgroup security is strapped secure, cannot toggle secure mode");
+                        return false;
+                    }
+                    // If current talkgroup is not set up for encryption, bonk
+                    if (vChannel.CurrentTalkgroup.KeyId == 0 || vChannel.CurrentTalkgroup.AlgId == P25Defines.P25_ALGO_UNENCRYPT)
+                    {
+                        Log.Logger.Warning("Talkgroup is not configured for secure operation, cannot toggle secure mode");
+                        return false;
+                    }
+                    // Toggle secure status
+                    vChannel.Secure = !vChannel.Secure;
+                    Log.Logger.Information("Toggling secure mode for radio {name:l}: {state:l}", vChannel.Config.Name, (vChannel.Secure ? "ON" : "OFF"));
+                    // Return channel setup success/failure
+                    return vChannel.SetupChannel();
+                
+                // Handle unhandled buttons
+                default:
+                    return false;
+            }
         }
     }
 }
