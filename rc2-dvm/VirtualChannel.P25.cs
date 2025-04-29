@@ -153,6 +153,7 @@ namespace rc2_dvm
             // Encrypt call if encryption selected or strapped
             if (CurrentTalkgroup.Strapped || Secure)
             {
+
                 // KEYFAIL if keys aren't loaded
                 if (!loadedKeys.ContainsKey(CurrentTalkgroup.KeyId))
                 {
@@ -172,19 +173,29 @@ namespace rc2_dvm
                             callMi[i] = (byte)random.Next(0x00, 0x100);
                         }
                     }
-
                     crypto.Prepare(CurrentTalkgroup.AlgId, CurrentTalkgroup.KeyId, callMi);
+                    //Log.Logger.Debug("({0:l}) Prepared initial crypto params for TX", Config.Name);
                 }
 
                 // Encrypt
-                crypto.Process(imbe, p25N < 9U ? P25DUID.LDU1 : P25DUID.LDU2);
+                if (crypto.Process(imbe, p25N < 9U ? P25DUID.LDU1 : P25DUID.LDU2))
+                {
+                    //Log.Logger.Debug("({0:l}) Processed crypto for P25 frame {n}", Config.Name, p25N);
+                }
+                else
+                {
+                    Log.Logger.Error("({0:l}) Failed to encrypt call data!");
+                }
 
                 // Prepare a new MI on last block of LDU2
                 if (p25N == 17U)
                 {
                     P25Crypto.CycleP25Lfsr(callMi);
                     crypto.Prepare(CurrentTalkgroup.AlgId, CurrentTalkgroup.KeyId, callMi);
+                    //Log.Logger.Debug("({0:l}) Prepared crypto MI for next round", Config.Name);
                 }
+
+                //Log.Logger.Debug("({0:l}) TG {tg} ({TGID}) is strapped or switched secure", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
             }
             
             // fill the LDU buffers appropriately
@@ -453,6 +464,7 @@ namespace rc2_dvm
                         crypto.SetKey(callKeyId, callAlgoId, loadedKeys[callKeyId].GetKey());
                         // Set up crypto engine
                         crypto.Prepare(callAlgoId, callKeyId, callMi);
+                        // Log
                         Log.Logger.Debug("({0:l}) Preparing decryption for Key ID {keyID:X4} ({algo:l})", Config.Name, CurrentTalkgroup.KeyId, Enum.GetName(typeof(Algorithm), CurrentTalkgroup.AlgId));
                     }
                     

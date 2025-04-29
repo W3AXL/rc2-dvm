@@ -417,8 +417,8 @@ namespace rc2_dvm
                     KeyItem key = keyContainer.GetKeyById(CurrentTalkgroup.KeyId);
                     if (key != null)
                     {
-                        Log.Logger.Information("Loaded Key ID 0x{KeyId:X4} ({Algo:l}) from keyfile into local keystore", key.KeyId, Enum.GetName(typeof(Algorithm), key.KeyFormat));
                         loadedKeys[key.KeyId] = key;
+                        Log.Logger.Information("Loaded Key ID 0x{KeyId:X4} ({Algo:l}) from keyfile into local keystore", key.KeyId, Enum.GetName(typeof(Algorithm), key.KeyFormat));
                     }
                     // Request from FNE as a fallback
                     else
@@ -504,6 +504,8 @@ namespace rc2_dvm
             sourceIdTimer.Stop();
             // Stop rx data timeout timer
             rxDataTimer.Stop();
+            // Reset P25 counter
+            p25N = 0;
             // Update status
             dvmRadio.Status.State = RadioState.Idle;
             ignoreCall = false;
@@ -580,7 +582,7 @@ namespace rc2_dvm
                 }
                 else
                 {
-                    //crypto.SetKey(0, P25Defines.P25_ALGO_UNENCRYPT, new byte[1]);
+                    crypto.SetKey(CurrentTalkgroup.KeyId, P25Defines.P25_ALGO_UNENCRYPT, loadedKeys[CurrentTalkgroup.KeyId].GetKey());
                     Log.Logger.Information($"({Config.Name}) Start TX on TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
                 }
 
@@ -616,6 +618,8 @@ namespace rc2_dvm
             Log.Logger.Information($"({Config.Name}) Stop TX on TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
             // Send TDU
             RC2DVM.fneSystem.SendP25TDU(Config.SourceId, CurrentTalkgroup.DestinationId);
+            // Reset call
+            resetCall();
             // Update radio status
             dvmRadio.Status.State = RadioState.Idle;
             dvmRadio.StatusCallback();
