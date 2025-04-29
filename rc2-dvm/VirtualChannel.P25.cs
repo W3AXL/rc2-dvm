@@ -173,26 +173,30 @@ namespace rc2_dvm
                             callMi[i] = (byte)random.Next(0x00, 0x100);
                         }
                     }
-                    crypto.Prepare(CurrentTalkgroup.AlgId, CurrentTalkgroup.KeyId, callMi);
+                    if (!crypto.Prepare(CurrentTalkgroup.AlgId, CurrentTalkgroup.KeyId, callMi))
+                    {
+                        Log.Logger.Error("({0:l}) Failed to prepare crypto params for Key {keyId}", Config.Name, CurrentTalkgroup.KeyId);
+                        return;
+                    }
                     //Log.Logger.Debug("({0:l}) Prepared initial crypto params for TX", Config.Name);
                 }
 
                 // Encrypt
-                if (crypto.Process(imbe, p25N < 9U ? P25DUID.LDU1 : P25DUID.LDU2))
-                {
-                    //Log.Logger.Debug("({0:l}) Processed crypto for P25 frame {n}", Config.Name, p25N);
-                }
-                else
+                if (!crypto.Process(imbe, p25N < 9U ? P25DUID.LDU1 : P25DUID.LDU2))
                 {
                     Log.Logger.Error("({0:l}) Failed to encrypt call data!");
+                    return;
                 }
 
                 // Prepare a new MI on last block of LDU2
                 if (p25N == 17U)
                 {
                     P25Crypto.CycleP25Lfsr(callMi);
-                    crypto.Prepare(CurrentTalkgroup.AlgId, CurrentTalkgroup.KeyId, callMi);
-                    //Log.Logger.Debug("({0:l}) Prepared crypto MI for next round", Config.Name);
+                    if (!crypto.Prepare(CurrentTalkgroup.AlgId, CurrentTalkgroup.KeyId, callMi))
+                    {
+                        Log.Logger.Error("({0:l}) Failed to prepare crypto params for Key {keyId}", Config.Name, CurrentTalkgroup.KeyId);
+                        return;
+                    }
                 }
 
                 //Log.Logger.Debug("({0:l}) TG {tg} ({TGID}) is strapped or switched secure", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);

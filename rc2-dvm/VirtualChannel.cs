@@ -582,7 +582,7 @@ namespace rc2_dvm
                 }
                 else
                 {
-                    crypto.SetKey(CurrentTalkgroup.KeyId, P25Defines.P25_ALGO_UNENCRYPT, loadedKeys[CurrentTalkgroup.KeyId].GetKey());
+                    crypto.SetKey(CurrentTalkgroup.KeyId, P25Defines.P25_ALGO_UNENCRYPT, new byte[7]);
                     Log.Logger.Information($"({Config.Name}) Start TX on TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
                 }
 
