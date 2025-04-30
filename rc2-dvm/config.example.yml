@@ -119,12 +119,20 @@ virtualChannels:
         destinationId: 1
         # Talkgroup timeslot (only used for DMR talkgroups)
         timeslot: 1
+        
         # Talkgroup Textual name
       - name: TG2
         # Talkgroup ID
         destinationId: 2
         # Talkgroup timeslot (only used for DMR talkgroups)
         timeslot: 1
+        # Crypto algorithm ID (0x80 = Clear, 0x81 = DES, 0x84 = AES, 0xAA = ARC4/ADP)
+        algId: 0xAA
+        # Crypto Key ID (loaded from keyfile or FNE)
+        keyId: 0x01
+        # Whether this talkgroup is full-time strapped or selectable encryption
+        strapped: true
+        
         # Talkgroup Textual name
       - name: PARROT
         # Talkgroup ID

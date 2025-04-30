@@ -244,6 +244,7 @@ namespace rc2_dvm
                     Log.Logger.Information("[RC2-DVM] Loading EKC {file:l}", config.Encryption.KeyFile);
                     IDeserializer keyDeserializer = new DeserializerBuilder()
                         .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                        .IgnoreUnmatchedProperties()
                         .Build();
                     keyContainer = keyDeserializer.Deserialize<KeyContainer>(File.ReadAllText(config.Encryption.KeyFile));
                 }
