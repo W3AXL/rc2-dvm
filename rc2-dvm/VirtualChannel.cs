@@ -58,7 +58,7 @@ namespace rc2_dvm
         // Variables for displaying active source ID
         private bool showingSourceId;
         private uint lastSourceId;
-        private System.Timers.Timer sourceIdTimer;
+        // private System.Timers.Timer sourceIdTimer;
 
         private DVMRadio dvmRadio;
 
@@ -501,7 +501,7 @@ namespace rc2_dvm
         private void resetCall()
         {
             // Stop source ID callback
-            sourceIdTimer.Stop();
+            // sourceIdTimer.Stop();
             // Stop rx data timeout timer
             rxDataTimer.Stop();
             // Reset P25 counter
