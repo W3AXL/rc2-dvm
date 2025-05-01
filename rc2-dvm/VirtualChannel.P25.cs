@@ -531,6 +531,7 @@ namespace rc2_dvm
                 dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
                 // Stop RX data timeout timer
                 rxDataTimer.Stop();
+                dvmRadio.Status.CallerId = "";
                 // Status update
                 dvmRadio.StatusCallback();
                 // Log

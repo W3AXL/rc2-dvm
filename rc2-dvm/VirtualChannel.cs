@@ -186,8 +186,8 @@ namespace rc2_dvm
             }
 
             // Init source ID display stuff
-            sourceIdTimer = new System.Timers.Timer(1000);
-            sourceIdTimer.Elapsed += sourceIdTimerCallback;
+            //sourceIdTimer = new System.Timers.Timer(1000);
+            //sourceIdTimer.Elapsed += sourceIdTimerCallback;
             //sourceIdTimer.Enabled = true;
 
             // Init rx data timeout timer
@@ -286,21 +286,21 @@ namespace rc2_dvm
         /// </summary>
         /// <param name="source"></param>
         /// <param name="e"></param>
-        private void sourceIdTimerCallback(Object source, ElapsedEventArgs e)
-        {
-            if (showingSourceId)
-            {
-                dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
-                dvmRadio.StatusCallback();
-                showingSourceId = false;
-            }
-            else
-            {
-                dvmRadio.Status.ChannelName = $"ID: {lastSourceId}";
-                dvmRadio.StatusCallback();
-                showingSourceId = true;
-            }
-        }
+        //private void sourceIdTimerCallback(Object source, ElapsedEventArgs e)
+        //{
+        //    if (showingSourceId)
+        //    {
+        //        dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
+        //        dvmRadio.StatusCallback();
+        //        showingSourceId = false;
+        //    }
+        //    else
+        //    {
+        //        //dvmRadio.Status.ChannelName = $"ID: {lastSourceId}";
+        //        dvmRadio.StatusCallback();
+        //        showingSourceId = true;
+        //    }
+        //}
 
         /// <summary>
         /// Function called when the rx data timeout timer is hit, will force-reset the call data on loss of LDUs
@@ -311,7 +311,7 @@ namespace rc2_dvm
         {
             Log.Logger.Warning("RX data timeout, resetting call");
             resetCall();
-        }
+        //}
 
         /// <summary>
         /// Start the virtual channel
