@@ -498,6 +498,7 @@ namespace rc2_dvm
                 
                 // Start source ID display callback
                 lastSourceId = e.SrcId;
+                dvmRadio.Status.CallerId = lastSourceId.ToString();
                 // sourceIdTimer.Start();
                 // Start RX data timeout timer
                 rxDataTimer.Start();
