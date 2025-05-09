@@ -311,7 +311,7 @@ namespace rc2_dvm
         {
             Log.Logger.Warning("RX data timeout, resetting call");
             resetCall();
-        //}
+        }
 
         /// <summary>
         /// Start the virtual channel
