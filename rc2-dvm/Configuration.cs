@@ -180,6 +180,10 @@ namespace rc2_dvm
         /// Whether to only pass RX traffic for the configured key and not any key
         /// </summary>
         public bool StrictKeyMapping = true;
+        /// <summary>
+        /// Announcement talkgroup for the virtual channel
+        /// </summary>
+        public uint AnnouncementGroup = 0;
     }
 
     /// <summary>

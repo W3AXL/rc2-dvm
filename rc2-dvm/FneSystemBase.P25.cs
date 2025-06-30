@@ -478,7 +478,7 @@ namespace rc2_dvm
                     // Remove this from the active call list if present
                     if (IsTalkgroupActive(e.DstId))
                     {
-                        Log.Logger.Debug($"({RC2DVM.fneSystem.SystemName}) P25 {Enum.GetName(typeof(P25DUID), e.DUID)}, removing P25 TG {e.DstId} from list of active talkgroups");
+                        Log.Logger.Debug("({0:l}) P25 {1:l}, removing P25 TG {2} from list of active talkgroups", RC2DVM.fneSystem.SystemName, Enum.GetName(typeof(P25DUID), e.DUID), e.DstId);
                         RemoveActiveTalkgroup(e.DstId);
                     }
                 } else
@@ -486,16 +486,28 @@ namespace rc2_dvm
                     // Check if we need to add it to the list of active calls
                     if (!IsTalkgroupActive(e.DstId))
                     {
-                        Log.Logger.Debug($"({RC2DVM.fneSystem.SystemName}) P25 {Enum.GetName(typeof(P25DUID), e.DUID)}, adding P25 TG {e.DstId} to list of active talkgroups");
+                        Log.Logger.Debug("({0:l}) P25 {1:l}, adding P25 TG {2} to list of active talkgroups", RC2DVM.fneSystem.SystemName, Enum.GetName(typeof(P25DUID), e.DUID), e.DstId);
                         AddActiveTalkgroup(e.DstId);
                     }
                 }
 
-                // Find any channels which are currently on this talkgroup and send data to them
+                // Find any channels which are currently on this talkgroup or ATG
                 foreach (VirtualChannel channel in RC2DVM.VirtualChannels)
                 {
+                    // Don't send to channels that are transmitting
+                    if (channel.IsTransmitting()) {
+                        Log.Logger.Debug("({0:l}) Not sending data from P25 TG {1} to channel {2:l}, channel is currently transmitting", RC2DVM.fneSystem.SystemName, e.DstId, channel.Config.Name);
+                        continue; 
+                    }
+                    // Send data to any channel on the TG or configured for the TG as its ATG
                     if (channel.IsTalkgroupSelected(VocoderMode.P25, e.DstId))
                     {
+                        Log.Logger.Debug("({0:l}) P25 TG {1} {2:l} -> {3:l}", RC2DVM.fneSystem.SystemName, e.DstId, Enum.GetName(typeof(P25DUID), e.DUID), channel.Config.Name);
+                        channel.P25DataReceived(e, pktTime);
+                    }
+                    else if (channel.Config.AnnouncementGroup == e.DstId)
+                    {
+                        Log.Logger.Debug("({0:l}) P25 ATG {1} {2:l} -> {3:l}", RC2DVM.fneSystem.SystemName, e.DstId, Enum.GetName(typeof(P25DUID), e.DUID), channel.Config.Name);
                         channel.P25DataReceived(e, pktTime);
                     }
                 }

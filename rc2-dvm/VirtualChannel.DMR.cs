@@ -150,7 +150,7 @@ namespace rc2_dvm
                     emb.Encode(ref data);
                 }
 
-                Log.Logger.Information($"({Config.Name}) DMRD: Traffic *VOICE FRAME    * PEER {RC2DVM.fneSystem.PeerId} SRC_ID {srcId} TGID {dstId} TS {slot} VC{dmrN} [STREAM ID {txStreamId}]");
+                Log.Logger.Information("({0:l}) DMRD: Traffic *VOICE FRAME    * PEER {1} SRC_ID {2} TGID {3} TS {4} VC{} [STREAM ID {5}]", Config.Name, RC2DVM.fneSystem.PeerId, srcId, dstId, slot, dmrN, txStreamId);
 
                 // generate DMR network frame
                 dmrpkt = new byte[FneSystemBase.DMR_PACKET_SIZE];
@@ -233,7 +233,7 @@ namespace rc2_dvm
 
                     if (samples != null)
                     {
-                        Log.Logger.Information($"({Config.Name}) DMRD: Traffic *VOICE FRAME    * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} TS {e.Slot + 1} VC{e.n}.{n} ERRS {errs} [STREAM ID {e.StreamId}]");
+                        Log.Logger.Information("({0:l}) DMRD: Traffic *VOICE FRAME    * PEER {1} SRC_ID {2} TGID {3} TS {4} VC{5}.{6} ERRS {7} [STREAM ID {8}]", Config.Name, e.PeerId, e.SrcId, e.DstId, e.Slot + 1, e.n, n, errs, e.StreamId);
                         // Log.Logger.Debug($"PARTIAL AMBE {FneUtils.HexDump(ambePartial)}");
                         // Log.Logger.Debug($"SAMPLE BUFFER {FneUtils.HexDump(samples)}");
 
@@ -264,7 +264,7 @@ namespace rc2_dvm
             }
             catch (Exception ex)
             {
-                Log.Logger.Error($"Audio Decode Exception: {ex.Message}");
+                Log.Logger.Error(ex, "({0:l}) Audio Decode Exception", Config.Name);
             }
         }
 
@@ -278,7 +278,7 @@ namespace rc2_dvm
             {
                 callInProgress = true;
                 status[e.Slot].RxStart = pktTime;
-                Log.Logger.Information($"({Config.Name}) DMRD: Traffic *CALL START     * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} [STREAM ID {e.StreamId}]");
+                Log.Logger.Information("({0:l}) DMRD: Traffic *CALL START     * PEER {1} SRC_ID {2} TGID {3} [STREAM ID {4}]", Config.Name, e.PeerId, e.SrcId, e.DstId, e.StreamId);
 
                 // if we can, use the LC from the voice header as to keep all options intact
                 if ((e.FrameType == FrameType.DATA_SYNC) && (e.DataType == DMRDataType.VOICE_LC_HEADER))
@@ -294,7 +294,7 @@ namespace rc2_dvm
                     };
 
                 status[e.Slot].DMR_RxPILC = new PrivacyLC();
-                Log.Logger.Debug($"({Config.Name}) TS {e.Slot + 1} [STREAM ID {e.StreamId}] RX_LC {FneUtils.HexDump(status[e.Slot].DMR_RxLC.GetBytes())}");
+                Log.Logger.Debug("({0:l}) TS {1} [STREAM ID {2}] RX_LC {3}", Config.Name, e.Slot + 1, e.StreamId, FneUtils.HexDump(status[e.Slot].DMR_RxLC.GetBytes()));
             }
 
             // if we can, use the PI LC from the PI voice header as to keep all options intact
@@ -302,15 +302,15 @@ namespace rc2_dvm
             {
                 PrivacyLC lc = FullLC.DecodePI(data);
                 status[e.Slot].DMR_RxPILC = lc;
-                Log.Logger.Information($"({Config.Name}) DMRD: Traffic *CALL PI PARAMS  * PEER {e.PeerId} DST_ID {e.DstId} TS {e.Slot + 1} ALGID {lc.AlgId} KID {lc.KId} [STREAM ID {e.StreamId}]");
-                Log.Logger.Debug($"({Config.Name}) TS {e.Slot + 1} [STREAM ID {e.StreamId}] RX_PI_LC {FneUtils.HexDump(status[e.Slot].DMR_RxPILC.GetBytes())}");
+                Log.Logger.Information("({0:l}) DMRD: Traffic *CALL PI PARAMS  * PEER {1} DST_ID {2} TS {3} ALGID {4} KID {5} [STREAM ID {6}]", Config.Name, e.PeerId, e.DstId, e.Slot + 1, lc.AlgId, lc.KId, e.StreamId);
+                Log.Logger.Debug("({0:l}) TS {1} [STREAM ID {2}] RX_PI_LC {3}", Config.Name, e.Slot + 1, e.StreamId, FneUtils.HexDump(status[e.Slot].DMR_RxPILC.GetBytes()));
             }
 
             if ((e.FrameType == FrameType.DATA_SYNC) && (e.DataType == DMRDataType.TERMINATOR_WITH_LC) && (status[e.Slot].RxType != FrameType.TERMINATOR))
             {
                 callInProgress = false;
                 TimeSpan callDuration = pktTime - status[0].RxStart;
-                Log.Logger.Information($"({Config.Name}) DMRD: Traffic *CALL END       * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} DUR {callDuration} [STREAM ID {e.StreamId}]");
+                Log.Logger.Information("({0:l}) DMRD: Traffic *CALL END       * PEER {1} SRC_ID {2} TGID {3} DUR {4} [STREAM ID {5}]", Config.Name, e.PeerId, e.SrcId, e.DstId, callDuration, e.StreamId);
             }
 
             if (e.FrameType == FrameType.VOICE_SYNC || e.FrameType == FrameType.VOICE)

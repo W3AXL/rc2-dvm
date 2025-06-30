@@ -12,6 +12,7 @@ using fnecore.DMR;
 using fnecore;
 
 using NAudio.Wave;
+using fnecore.P25;
 
 namespace rc2_dvm
 {
@@ -119,15 +120,27 @@ namespace rc2_dvm
             {
                 if (e.SrcId == 0)
                 {
-                    Log.Logger.Warning($"({SystemName}) DMRD: Received call from SRC_ID {e.SrcId}? Dropping call data.");
+                    Log.Logger.Warning("({0:l}) DMRD: Received call from SRC_ID {1}? Dropping call data.", SystemName, e.SrcId);
                     return;
                 }
 
-                // Find any virtual channels which have this talkgroup/timeslot selected
+                // Find any virtual channels which have this talkgroup/timeslot selected or ATG
                 foreach (VirtualChannel channel in RC2DVM.VirtualChannels)
                 {
-                    if (channel.IsTalkgroupSelected(VocoderMode.DMR, e.DstId, e.Slot))
+                    // Don't send to channels that are transmitting
+                    if (channel.IsTransmitting()) {
+                        Log.Logger.Debug("({0:l}) Not sending data from DMR TG {1} to channel {2}, channel is currently transmitting", RC2DVM.fneSystem.SystemName, e.DstId, channel.Config.Name);
+                        continue; 
+                    }
+                    // Send data to any channel on the TG or configured for the TG as its ATG
+                    if (channel.IsTalkgroupSelected(VocoderMode.DMR, e.DstId, e.Slot) || (channel.Config.AnnouncementGroup == e.DstId))
                     {
+                        Log.Logger.Debug("({0:l}) DMR TG {2} -> {3}", RC2DVM.fneSystem.SystemName, e.DstId, channel.Config.Name);
+                        channel.DMRHandleRecieved(e, data, pktTime);
+                    }
+                    else if (channel.Config.AnnouncementGroup == e.DstId)
+                    {
+                        Log.Logger.Debug("({0:l}) DMR ATG {1} -> {2}", RC2DVM.fneSystem.SystemName, e.DstId, channel.Config.Name);
                         channel.DMRHandleRecieved(e, data, pktTime);
                     }
                 }

@@ -94,7 +94,7 @@ namespace rc2_dvm
             if (tone > 0)
             {
                 MBEToneGenerator.IMBEEncodeSingleTone((ushort)tone, imbe);
-                Log.Logger.Debug($"({Config.Name}) P25D: {tone} HZ TONE DETECT");
+                Log.Logger.Debug("({0:l}) P25D: {1} HZ TONE DETECT", Config.Name, tone);
             }
             else
             {
@@ -418,7 +418,7 @@ namespace rc2_dvm
             }
             catch (Exception ex)
             {
-                Log.Logger.Error($"Audio Decode Exception: {ex.Message}");
+                Log.Logger.Error(ex, "({0:l}) Audio Decode Exception", Config.Name);
             }
         }
 
@@ -534,7 +534,7 @@ namespace rc2_dvm
                 // Status update
                 dvmRadio.StatusCallback();
                 // Log
-                Log.Logger.Information($"({Config.Name}) P25D: Traffic *CALL END       * PEER {e.PeerId} SRC_ID {e.SrcId} TGID {e.DstId} DUR {callDuration} [STREAM ID {e.StreamId}]");
+                Log.Logger.Information("({0:l}) P25D: Traffic *CALL END       * PEER {1} SRC_ID {2} TGID {3} DUR {4} [STREAM ID {5}]", Config.Name, e.PeerId, e.SrcId, e.DstId, callDuration, e.StreamId);
                 return;
             }
 
@@ -575,11 +575,11 @@ namespace rc2_dvm
                 // Log
                 if (callAlgoId != P25Defines.P25_ALGO_UNENCRYPT)
                 {
-                    Log.Logger.Information("({0}) P25D: Traffic *ENC CALL LATE START* PEER {1} SRC_ID {2} TGID {3} ALGO {4:l} KEY 0x{5:X4} [STREAM ID {6}]", Config.Name, e.PeerId, e.SrcId, e.DstId, Enum.GetName(typeof(Algorithm), callAlgoId), callKeyId, e.StreamId);
+                    Log.Logger.Information("({0:l}) P25D: Traffic *ENC CALL LATE START* PEER {1} SRC_ID {2} TGID {3} ALGO {4:l} KEY 0x{5:X4} [STREAM ID {6}]", Config.Name, e.PeerId, e.SrcId, e.DstId, Enum.GetName(typeof(Algorithm), callAlgoId), callKeyId, e.StreamId);
                 }
                 else
                 {
-                    Log.Logger.Information("({0}) P25D: Traffic *CALL LATE START    * PEER {1} SRC_ID {2} TGID {3} [STREAM ID {4}]", Config.Name, e.PeerId, e.SrcId, e.DstId, e.StreamId);
+                    Log.Logger.Information("({0:l}) P25D: Traffic *CALL LATE START    * PEER {1} SRC_ID {2} TGID {3} [STREAM ID {4}]", Config.Name, e.PeerId, e.SrcId, e.DstId, e.StreamId);
                 }
             }
 

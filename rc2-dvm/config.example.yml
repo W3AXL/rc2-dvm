@@ -105,6 +105,8 @@ virtualChannels:
     rxOnly: false
     # Whether to send grant demands on TX
     txGrantDemands: true
+    # Announcement Group
+    announcementGroup: 65534
     
     #
     # Talkgroups for this channel
