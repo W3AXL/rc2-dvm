@@ -16,6 +16,7 @@ namespace rc2_dvm
         // Fixed softkeys for a DVM channel
         internal static List<SoftkeyName> DVMSoftkeys = new List<SoftkeyName>
         {
+            SoftkeyName.HOME,
             SoftkeyName.SCAN,
             SoftkeyName.SEC,
         };
@@ -81,14 +82,8 @@ namespace rc2_dvm
 
         public override bool PressButton(SoftkeyName name)
         {
-            switch (name)
-            {
-                case SoftkeyName.SEC:
-                    return true;
-
-                default:
-                    return false;
-            }
+            // All buttons currently return true on press, release handles rejection
+            return true;
         }
 
         public override bool ReleaseButton(SoftkeyName name)
@@ -114,6 +109,10 @@ namespace rc2_dvm
                     Log.Logger.Information("Toggling secure mode for radio {name:l}: {state:l}", vChannel.Config.Name, (vChannel.Secure ? "ON" : "OFF"));
                     // Return channel setup success/failure
                     return vChannel.SetupChannel();
+
+                // HOME
+                case SoftkeyName.HOME:
+                    return vChannel.GoHome();
                 
                 // Handle unhandled buttons
                 default:

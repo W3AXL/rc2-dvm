@@ -169,6 +169,10 @@ namespace rc2_dvm
         /// </summary>
         public List<TalkgroupConfigObject>? Talkgroups;
         /// <summary>
+        /// The talkgroup that this channel starts on, and reverts to on a press of the HOME softkey
+        /// </summary>
+        public string? HomeTalkgroup;
+        /// <summary>
         /// Whether this channel is RX-only or not (TX disabled)
         /// </summary>
         public bool RxOnly = false;

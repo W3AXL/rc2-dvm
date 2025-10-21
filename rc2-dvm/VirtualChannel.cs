@@ -123,6 +123,11 @@ namespace rc2_dvm
         }
 
         /// <summary>
+        /// The index of the home talkgroup in the talkgroup list
+        /// </summary>
+        private int homeTalkgroupIndex = -1;
+
+        /// <summary>
         /// Creates a new instance of a virtual channel
         /// </summary>
         /// <param name="config"></param>
@@ -155,8 +160,15 @@ namespace rc2_dvm
                 Log.Logger.Information("({0:l}) using global talkgroups list", Config.Name);
             }
 
-            // Load sounds
-            LoadSounds();
+            // Load home talkgroup
+            homeTalkgroupIndex = Config.Talkgroups.FindIndex(tg => tg.Name == Config.HomeTalkgroup);
+            if (homeTalkgroupIndex < 0)
+                Log.Logger.Warning("Could not find home talkgroup matching '{0}'", Config.HomeTalkgroup);
+            else
+                currentTgIdx = homeTalkgroupIndex;
+
+                // Load sounds
+                LoadSounds();
 
 #if WIN32
             // Try to find external AMBE.DLL interop library
@@ -301,6 +313,7 @@ namespace rc2_dvm
                     Log.Logger.Information("        TGID {DestinationId} ({Name:l}){Enc:l}", talkgroup.DestinationId, talkgroup.Name, encStr);
                 }    
             }
+            Log.Logger.Information("    Home Talkgroup: {0}", homeTalkgroupIndex >= 0 ? Config.HomeTalkgroup : "None");
 
             // Initialize new DVM radio
             dvmRadio = new DVMRadio(
@@ -428,6 +441,38 @@ namespace rc2_dvm
                 return SetupChannel();
             }
             else { return false; }
+        }
+
+        /// <summary>
+        /// Goto the specified channel index
+        /// </summary>
+        /// <param name="index"></param>
+        /// <returns></returns>
+        public bool ChannelIndex(int index)
+        {
+            // Stop transmit
+            if (dvmRadio.Status.State == RadioState.Transmitting)
+                StopTransmit();
+
+            // Ensure index is in range
+            if (index < 0 || index >= Config.Talkgroups.Count)
+            {
+                Log.Logger.Error("({0:l}) Cannot goto talkgroup index {0}, out of range!", index);
+                return false;
+            }
+
+            // Goto Channel
+            currentTgIdx = index;
+            // Update Status
+            dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
+            // Reset any call
+            resetCall();
+            // Restart aff timer
+            resetAffTimer();
+            // Log
+            Log.Logger.Debug("({0:l}) Selected TG {1:l} ({2})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
+            // Return setup success
+            return SetupChannel();
         }
 
         /// <summary>
@@ -758,6 +803,18 @@ namespace rc2_dvm
             dvmRadio.RxSendPCM16Samples(toneAtg, (uint)waveFormat.SampleRate);
             // Return
             return skipFrames;
+        }
+
+        /// <summary>
+        /// Goto the configured home channel, or return false if home channel not configured
+        /// </summary>
+        /// <returns></returns>
+        public bool GoHome()
+        {
+            // Return false if not configured
+            if (homeTalkgroupIndex < 0) { return false; }
+            // Goto channel if configured
+            return ChannelIndex(homeTalkgroupIndex);
         }
     }
 }
