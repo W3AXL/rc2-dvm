@@ -407,3 +407,4 @@ out/
 config.yml
 config-*.yml
 rc2-dvm/keys.yml
+*.zip

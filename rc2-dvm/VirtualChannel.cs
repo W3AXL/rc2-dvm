@@ -22,7 +22,10 @@ using NAudio.Dsp;
 using NWaves.Signals;
 using NWaves.Signals.Builders;
 using NWaves.Signals.Builders.Base;
+using NWaves.Audio;
+using NWaves.Operations;
 using Org.BouncyCastle.Asn1;
+using NAudio.Midi;
 
 namespace rc2_dvm
 {
@@ -44,7 +47,7 @@ namespace rc2_dvm
         private AmbeVocoder extHalfRateVocoder;
 #endif
 
-        private WaveFormat waveFormat = new WaveFormat(FneSystemBase.SAMPLE_RATE, FneSystemBase.BITS_PER_SECOND, 1);
+        private NAudio.Wave.WaveFormat waveFormat = new NAudio.Wave.WaveFormat(FneSystemBase.SAMPLE_RATE, FneSystemBase.BITS_PER_SECOND, 1);
 
         private bool callInProgress = false;
 
@@ -72,6 +75,12 @@ namespace rc2_dvm
 
         // MBE Tone Detector
         private MBEToneDetector toneDetector;
+
+        // 9 MBE frames per LDU
+        const int LDU_SAMPLES_LENGTH = FneSystemBase.MBE_SAMPLES_LENGTH * 9;
+
+        // Sounds
+        private short[] toneAtg;
 
         // Whether the channel is "scanning" (able to receive from any talkgroup)
         private bool scanning = false;
@@ -128,6 +137,27 @@ namespace rc2_dvm
             // Store encryption settings
             this.keyContainer = keyContainer;
 
+            // Fallback to global audio config if none provided
+            if (Config.AudioConfig == null)
+            {
+                Config.AudioConfig = RC2DVM.Configuration.AudioConfig;
+                Log.Logger.Information("({0:l}) using global audio config", Config.Name);
+            }
+
+            // Fallback to global talkgroup list if none provided
+            if (Config.Talkgroups == null)
+            {
+                // Ensure we have a global list
+                if (RC2DVM.Configuration.Talkgroups == null)
+                    throw new Exception($"Virtual channel {Config.Name} has no talkgroups list and no global talkgroup list defined!");
+                // Load it
+                Config.Talkgroups = RC2DVM.Configuration.Talkgroups;
+                Log.Logger.Information("({0:l}) using global talkgroups list", Config.Name);
+            }
+
+            // Load sounds
+            LoadSounds();
+
 #if WIN32
             // Try to find external AMBE.DLL interop library
             string codeBase = System.AppContext.BaseDirectory;
@@ -135,7 +165,7 @@ namespace rc2_dvm
             string path = Uri.UnescapeDataString(uri.Path);
             string ambePath = Path.Combine(new string[] { Path.GetDirectoryName(path), "AMBE.DLL" });
 
-            Log.Logger.Debug($"({Config.Name}) checking for external vocoder library...");
+            Log.Logger.Debug("({0:l}) checking for external vocoder library...", Config.Name);
 
             if (File.Exists(ambePath))
             { 
@@ -145,11 +175,11 @@ namespace rc2_dvm
 
             if (externalAmbe)
             {
-                Log.Logger.Information($"({Config.Name}) AMBE.DLL found, using external vocoder interop!");
+                Log.Logger.Information("({0:l}) AMBE.DLL found, using external vocoder interop!", Config.Name);
             }
             else
             {
-                Log.Logger.Information($"({Config.Name}) Using software MBE vocoder");
+                Log.Logger.Information("({0:l}) Using software MBE vocoder", Config.Name);
             }
 
             // Instantiate the encoder/decoder pair based on the channel mode
@@ -251,6 +281,10 @@ namespace rc2_dvm
                 Log.Logger.Information("        TX Tone Valid Range: {TxToneLowerLimit} Hz to {TxToneUpperLimit} Hz", Config.AudioConfig.TxToneLowerLimit, Config.AudioConfig.TxToneUpperLimit);
             }
             Log.Logger.Information("    Mode: {Mode:l}", Config.Mode.ToString());
+            if (Config.AnnouncementGroup > 0)
+            {
+                Log.Logger.Information("    Announcement Group: {ATG:l}", Config.AnnouncementGroup.ToString());
+            }
             
             Log.Logger.Information("    Talkgroups ({TGCount}):", Config.Talkgroups.Count);
             foreach (TalkgroupConfigObject talkgroup in Config.Talkgroups)
@@ -309,7 +343,7 @@ namespace rc2_dvm
         /// <param name="e"></param>
         private void rxDataTimeout(Object source, ElapsedEventArgs e)
         {
-            Log.Logger.Warning("RX data timeout, resetting call");
+            Log.Logger.Warning("({0:l}) RX data timeout, resetting call", Config.Name);
             resetCall();
         }
 
@@ -360,7 +394,7 @@ namespace rc2_dvm
                 // Send status update
                 dvmRadio.StatusCallback();
                 // Log
-                Log.Logger.Debug($"({Config.Name}) Selected TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
+                Log.Logger.Debug("({0:l}) Selected TG {1:l} ({2})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
                 // Return channel setup success
                 return SetupChannel();
             }
@@ -389,7 +423,7 @@ namespace rc2_dvm
                 // Restart affiliation timer
                 resetAffTimer();
                 // Log
-                Log.Logger.Debug($"({Config.Name}) Selected TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
+                Log.Logger.Debug("({0:l}) Selected TG {1:l} ({2})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
                 // Return channel setup success
                 return SetupChannel();
             }
@@ -407,7 +441,7 @@ namespace rc2_dvm
                 // Ensure key ID is set
                 if (CurrentTalkgroup.KeyId == 0)
                 {
-                    Log.Logger.Error("KEYFAIL: {TG} ({TGID}) is configured for encryption but has Key ID 0", CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
+                    Log.Logger.Error("({0:l}) KEYFAIL: {TG} ({TGID}) is configured for encryption but has Key ID 0", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
                     return false;
                 }
                 // Load the key if it's not loaded already
@@ -418,12 +452,12 @@ namespace rc2_dvm
                     if (key != null)
                     {
                         loadedKeys[key.KeyId] = key;
-                        Log.Logger.Information("Loaded Key ID 0x{KeyId:X4} ({Algo:l}) from keyfile into local keystore", key.KeyId, Enum.GetName(typeof(Algorithm), key.KeyFormat));
+                        Log.Logger.Information("({0:l}) Loaded Key ID 0x{KeyId:X4} ({Algo:l}) from keyfile into local keystore", Config.Name, key.KeyId, Enum.GetName(typeof(Algorithm), key.KeyFormat));
                     }
                     // Request from FNE as a fallback
                     else
                     {
-                        Log.Logger.Information("Key ID 0x{keyId:X4} not found in local keyfile, requesting from FNE", CurrentTalkgroup.KeyId);
+                        Log.Logger.Information("({0:l}) Key ID 0x{keyId:X4} not found in local keyfile, requesting from FNE", Config.Name, CurrentTalkgroup.KeyId);
                         RC2DVM.fneSystem.peer.SendMasterKeyRequest(CurrentTalkgroup.AlgId, CurrentTalkgroup.KeyId);
                     }
                 }
@@ -466,7 +500,7 @@ namespace rc2_dvm
                 if (!loadedKeys.ContainsKey(key.KeyId))
                 {
                     loadedKeys[key.KeyId] = key;
-                    Log.Logger.Information("Loaded Key ID 0x{KeyID:X4} ({Algo}) from FNE KMM into local keystore", key.KeyId, Enum.GetName(typeof(Algorithm), key.KeyFormat));
+                    Log.Logger.Information("({0:l}) Loaded Key ID 0x{KeyID:X4} ({Algo}) from FNE KMM into local keystore", Config.Name, key.KeyId, Enum.GetName(typeof(Algorithm), key.KeyFormat));
                 }
             }
         }
@@ -478,7 +512,7 @@ namespace rc2_dvm
         /// <param name="e"></param>
         private void affToCurrentChannel(Object source, ElapsedEventArgs e)
         {
-            Log.Logger.Information("Sending GRP AFF for TG {tg} ({tgid})", CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
+            Log.Logger.Information("({0:l}) Sending GRP AFF for TG {tg} ({tgid})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
             RC2DVM.fneSystem.peer.SendMasterGroupAffiliation(Config.SourceId, CurrentTalkgroup.DestinationId);
         }
 
@@ -489,7 +523,7 @@ namespace rc2_dvm
         {
             if (RC2DVM.Configuration.Network.SendChannelAffiliations)
             {
-                Log.Logger.Debug("Restarting affiliation holdoff timer");
+                Log.Logger.Debug("({0:l}) Restarting affiliation holdoff timer", Config.Name);
                 affHoldoffTimer.Stop();
                 affHoldoffTimer.Start();
             }
@@ -567,7 +601,7 @@ namespace rc2_dvm
             // Check if talkgroup is active and return false if true
             if (RC2DVM.fneSystem.IsTalkgroupActive(CurrentTalkgroup.DestinationId, CurrentTalkgroup.Timeslot))
             {
-                Log.Logger.Debug($"({Config.Name}) Cannot transmit on TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId}), call in progress");
+                Log.Logger.Debug("({0:l}) Cannot transmit on TG {1} ({2}), call in progress", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
                 return false;
             }
             // "Grab" the talkgroup
@@ -578,12 +612,12 @@ namespace rc2_dvm
                 if (CurrentTalkgroup.KeyId != 0 && (Secure || CurrentTalkgroup.Strapped))
                 {
                     crypto.SetKey(CurrentTalkgroup.KeyId, CurrentTalkgroup.AlgId, loadedKeys[CurrentTalkgroup.KeyId].GetKey());
-                    Log.Logger.Information($"({Config.Name}) Start ENC TX on TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
+                    Log.Logger.Information("({0:l}) Start ENC TX on TG {1} ({2})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
                 }
                 else
                 {
                     crypto.SetKey(CurrentTalkgroup.KeyId, P25Defines.P25_ALGO_UNENCRYPT, new byte[7]);
-                    Log.Logger.Information($"({Config.Name}) Start TX on TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
+                    Log.Logger.Information("({0:l}) Start TX on TG {1} ({2})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
                 }
 
                 // Get new stream ID
@@ -615,7 +649,7 @@ namespace rc2_dvm
             {
                 return false;
             }
-            Log.Logger.Information($"({Config.Name}) Stop TX on TG {CurrentTalkgroup.Name} ({CurrentTalkgroup.DestinationId})");
+            Log.Logger.Information("({0:l}) Stop TX on TG {1} ({2})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
             // Send TDU
             RC2DVM.fneSystem.SendP25TDU(Config.SourceId, CurrentTalkgroup.DestinationId);
             // Reset call
@@ -625,6 +659,24 @@ namespace rc2_dvm
             dvmRadio.StatusCallback();
             // Remove active TG
             return RC2DVM.fneSystem.RemoveActiveTalkgroup(CurrentTalkgroup.DestinationId, CurrentTalkgroup.Timeslot);
+        }
+
+        /// <summary>
+        /// Returns whether the virtual channel is currently transmitting
+        /// </summary>
+        /// <returns></returns>
+        public bool IsTransmitting()
+        {
+            if (dvmRadio.Status.State == RadioState.Transmitting) { return true; } else { return false; }
+        }
+
+        /// <summary>
+        /// Returns whether the virtual channel is currently receiving
+        /// </summary>
+        /// <returns></returns>
+        public bool IsReceiving()
+        {
+            if (dvmRadio.Status.State == RadioState.Receiving) { return true; } else { return false; }
         }
 
         /// <summary>
@@ -658,6 +710,54 @@ namespace rc2_dvm
                     //DMREncodeAudioFrame(Config.SourceId, CurrentTalkgroup.DestinationId, (byte)CurrentTalkgroup.Timeslot, pcm16Samples);
                 }
             }
+        }
+
+        private void LoadSounds()
+        {
+            Log.Logger.Debug("Loading sounds for virtual channel");
+
+            // Load ATG tone
+            WaveFile atgTone = new WaveFile(rc2_dvm.Properties.Resources.sndAtgTone);
+            DiscreteSignal atgSignal = atgTone.Signals[0] * 0.25f; // -6 dB
+
+            // Resample if needed
+            if (atgSignal.SamplingRate != waveFormat.SampleRate)
+            {
+                Resampler resampler = new Resampler();
+                DiscreteSignal temp = resampler.Resample(atgSignal, waveFormat.SampleRate);
+                atgSignal = temp;
+            }
+
+            // Add silence at the start to account for console unmute delay (200ms seems to be good)
+            atgSignal = atgSignal.Delay(200 * (waveFormat.SampleRate / 1000));
+
+            // Calculate padded length to neatly align with a 9-MBE frame LDU
+            int paddedLength = (int)Math.Ceiling((double)atgSignal.Samples.Length / LDU_SAMPLES_LENGTH) * LDU_SAMPLES_LENGTH;
+
+            // Pad the signal
+            atgSignal = atgSignal.Delay(paddedLength - atgSignal.Samples.Length);
+            //Log.Logger.Debug("Padded ATG tone to {0} samples", paddedLength);
+
+            // Load the final samples into memory
+            toneAtg = Utils.FloatToPcm(atgSignal.Samples);
+        }
+
+        /// <summary>
+        /// Start the ATG tone playing and return the number of P25 MBE frames to skip
+        /// </summary>
+        /// <returns></returns>
+        public int PlayAtgTone()
+        {
+            // Skip if not loaded
+            if (toneAtg == null) { return 0; }
+            // Calculate the number of MBE frames to skip
+            int skipFrames = toneAtg.Length / LDU_SAMPLES_LENGTH;
+            // Debug print
+            Log.Logger.Debug("Sending ATG tone to Radio ({0} samples / {1} LDU frames)", toneAtg.Length, skipFrames);
+            // Send audio
+            dvmRadio.RxSendPCM16Samples(toneAtg, (uint)waveFormat.SampleRate);
+            // Return
+            return skipFrames;
         }
     }
 }

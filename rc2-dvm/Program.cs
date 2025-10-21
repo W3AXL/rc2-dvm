@@ -259,7 +259,7 @@ namespace rc2_dvm
                 }
 
                 // Instantiate FNE system
-                Log.Logger.Information($"[RC2-DVM] Starting FNE system");
+                Log.Logger.Information("[RC2-DVM] Starting FNE system");
 
                 fneSystem = new PeerSystem();
 #pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
@@ -268,7 +268,7 @@ namespace rc2_dvm
                 fneSystem.Start();
 
                 // Instantiate virtual channels
-                Log.Logger.Debug($"Creating {Configuration.VirtualChannels.Count} virtual channels");
+                Log.Logger.Debug("Creating {0} virtual channels", Configuration.VirtualChannels.Count);
                 Configuration.VirtualChannels.ForEach(channel =>
                 {
                     VirtualChannels.Add(new VirtualChannel(channel, keyContainer));
@@ -284,7 +284,7 @@ namespace rc2_dvm
                     }
                     catch (System.InvalidOperationException ex)
                     {
-                        Log.Logger.Error(ex, $"Failed to start virtual channel {channel.Config.Name} on {channel.Config.ListenAddress}:{channel.Config.ListenPort}");
+                        Log.Logger.Error(ex, "Failed to start virtual channel {0:l} on {1}:{2}", channel.Config.Name, channel.Config.ListenAddress, channel.Config.ListenPort);
                         Environment.Exit((int)ERRNO.EBADCONFIG);
                     }
                 });
@@ -296,7 +296,7 @@ namespace rc2_dvm
                 startShutdown.WaitOne();
                 
                 // Stop virtual channels
-                Log.Logger.Information("Stopping virtual channels");
+                Log.Logger.Information("[RC2-DVM] Stopping virtual channels");
                 VirtualChannels.ForEach(channel =>
                 {
                     channel.Stop();
@@ -305,7 +305,7 @@ namespace rc2_dvm
                 // Stop FNE connection
                 if (fneSystem.IsStarted)
                 {
-                    Log.Logger.Information($"[RC2-DVM] Stopping FNE system");
+                    Log.Logger.Information("[RC2-DVM] Stopping FNE system");
                     fneSystem.Stop();
                 }
                     
