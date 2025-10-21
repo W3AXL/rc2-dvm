@@ -32,6 +32,9 @@ namespace rc2_dvm
         private byte callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
         private ushort callKeyId = 0;
 
+        // Frame skip counter for ATG tone
+        private int toneAtgFrameSkip = 0;
+
         // Crypto handler
         P25Crypto crypto = new P25Crypto();
 
@@ -333,6 +336,14 @@ namespace rc2_dvm
             rxDataTimer.Stop();
             rxDataTimer.Start();
 
+            // If an ATG tone was sent, skip the required number of frames
+            if (toneAtgFrameSkip > 0)
+            {
+                Log.Logger.Debug("ATG tone played, skipping {0} more frames", toneAtgFrameSkip);
+                toneAtgFrameSkip--;
+                return;
+            }
+
             // Try to deccode audio
             try
             {
@@ -412,7 +423,7 @@ namespace rc2_dvm
                         short[] filtered16 = Utils.FloatToPcm(filtered.Samples);
 
                         // Send to WebRTC
-                        dvmRadio.RxSendPCM16Samples(filtered16, FneSystemBase.SAMPLE_RATE);
+                        dvmRadio.RxSendPCM16Samples(filtered16, (uint)waveFormat.SampleRate);
                     }
                 }
             }
@@ -512,6 +523,13 @@ namespace rc2_dvm
                 else
                 {
                     Log.Logger.Information("({0:l}) P25D: Traffic *CALL START    * PEER {1} SRC_ID {2} TGID {3} [STREAM ID {4}]", Config.Name, e.PeerId, e.SrcId, e.DstId, e.StreamId);
+                }
+
+                // Play a sound if it's an ATG call if so configured
+                if (e.DstId == Config.AnnouncementGroup && Config.AnnouncementGroupTone)
+                {
+                    Log.Logger.Information("({0:l} P25D: ATG CALL START, PLAYING TONE", Config.Name);
+                    toneAtgFrameSkip = PlayAtgTone();
                 }
                 
             }

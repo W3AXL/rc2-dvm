@@ -499,12 +499,13 @@ namespace rc2_dvm
                         Log.Logger.Debug("({0:l}) Not sending data from P25 TG {1} to channel {2:l}, channel is currently transmitting", RC2DVM.fneSystem.SystemName, e.DstId, channel.Config.Name);
                         continue; 
                     }
-                    // Send data to any channel on the TG or configured for the TG as its ATG
+                    // Send data to any channel on the TG
                     if (channel.IsTalkgroupSelected(VocoderMode.P25, e.DstId))
                     {
                         Log.Logger.Debug("({0:l}) P25 TG {1} {2:l} -> {3:l}", RC2DVM.fneSystem.SystemName, e.DstId, Enum.GetName(typeof(P25DUID), e.DUID), channel.Config.Name);
                         channel.P25DataReceived(e, pktTime);
                     }
+                    // Send to any channel with the ATG configured
                     else if (channel.Config.AnnouncementGroup == e.DstId)
                     {
                         Log.Logger.Debug("({0:l}) P25 ATG {1} {2:l} -> {3:l}", RC2DVM.fneSystem.SystemName, e.DstId, Enum.GetName(typeof(P25DUID), e.DUID), channel.Config.Name);

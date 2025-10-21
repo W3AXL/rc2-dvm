@@ -157,17 +157,17 @@ namespace rc2_dvm
         /// </summary>
         public VocoderMode Mode = VocoderMode.DMR;
         /// <summary>
-        /// Audio configuration for this virtual channel's vocoder
+        /// Audio configuration for this virtual channel's vocoder (overrides global audio config)
         /// </summary>
-        public AudioConfigObject AudioConfig = new AudioConfigObject();
+        public AudioConfigObject? AudioConfig;
         /// <summary>
         /// Source ID (aka Radio ID) for this virtual channel
         /// </summary>
         public uint SourceId;
         /// <summary>
-        /// List of available talkgroups for this virtual channel
+        /// List of available talkgroups for this virtual channel (overrides master talkgroup list)
         /// </summary>
-        public List<TalkgroupConfigObject> Talkgroups = new List<TalkgroupConfigObject>();
+        public List<TalkgroupConfigObject>? Talkgroups;
         /// <summary>
         /// Whether this channel is RX-only or not (TX disabled)
         /// </summary>
@@ -184,6 +184,10 @@ namespace rc2_dvm
         /// Announcement talkgroup for the virtual channel
         /// </summary>
         public uint AnnouncementGroup = 0;
+        /// <summary>
+        /// Whether to play a tone when an ATG call is received
+        /// </summary>
+        public bool AnnouncementGroupTone = false;
     }
 
     /// <summary>
@@ -259,6 +263,14 @@ namespace rc2_dvm
         /// Encryption Config
         /// </summary>
         public EncryptionConfigObject Encryption = new EncryptionConfigObject();
+        /// <summary>
+        /// Global Audio Config
+        /// </summary>
+        public AudioConfigObject AudioConfig = new AudioConfigObject();
+        /// <summary>
+        /// Global List of Talkgroups
+        /// </summary>
+        public List<TalkgroupConfigObject>? Talkgroups;
         /// <summary>
         /// Configured Virtual Channels
         /// </summary>

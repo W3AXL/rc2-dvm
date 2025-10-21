@@ -55,6 +55,71 @@ network:
     debug: false
 
 #
+# Global Audio Config
+#
+# This applies to any virtual channels that don't have their own audioConfig blocks
+#
+audioConfig:
+    # Audio lowpass filter high cut (Hz)
+    audioHighCut: 3500
+    # Post-vocoder RX audio gain
+    rxAudioGain: 1.0
+    # Vocoder RX audio gain (not used for external vocoders)
+    rxVocoderGain: 3.0
+    # Vocoder AGC enabled (not used for external vocoders)
+    rxVocoderAGC: false
+    # Pre-Vocoder TX audio gain
+    txAudioGain: 1.0
+    # Vocoder TX audio gain (not used for external vocoders)
+    txVocoderGain: 3.0
+    # Whether to repeat TX audio from the console on the local PC speakers
+    txLocalRepeat: false
+    # Whether to detect tones
+    txToneDetection: true
+    # Ratio above which a valid tone is detected (keep this default unless you get false positives)
+    txToneRatio: 95
+    # Number of sequential tone detections required before a tone is encoded
+    txToneHits: 3
+    # Lower limit for tone detection in hz
+    txToneLowerLimit: 500
+    # Upper limit for tone detection in hz
+    txToneUpperLimit: 2000
+
+#
+# (Optional) Global Talkgroups List
+#
+# This avoids having to repeat a talkgroup list for multiple channels
+# Individual channels can have their own talkgroups list which overrides this
+#
+talkgroups:
+    # Talkgroup Textual name
+  - name: TG1
+    # Talkgroup ID
+    destinationId: 1
+    # Talkgroup timeslot (only used for DMR talkgroups)
+    timeslot: 1
+        
+    # Talkgroup Textual name
+  - name: TG2
+    # Talkgroup ID
+    destinationId: 2
+    # Talkgroup timeslot (only used for DMR talkgroups)
+    timeslot: 1
+    # Crypto algorithm ID (0x80 = Clear, 0x81 = DES, 0x84 = AES, 0xAA = ARC4/ADP)
+    algId: 0xAA
+    # Crypto Key ID (loaded from keyfile or FNE)
+    keyId: 0x01
+    # Whether this talkgroup is full-time strapped or selectable encryption
+    strapped: true
+        
+    # Talkgroup Textual name
+  - name: PARROT
+    # Talkgroup ID
+    destinationId: 9990
+    # Talkgroup timeslot (only used for DMR talkgroups)
+    timeslot: 1
+
+#
 # Virtual Channel Config
 #
 # Each channel configured here represents a single "radio" that can be connected
@@ -72,7 +137,8 @@ virtualChannels:
     
     # Channel mode (1 = DMR, 2 = P25)
     mode: 2
-    # Vocoder Audio Configuration
+    
+    # (Optional) Vocoder Audio Configuration can override global audio config for a single channel
     audioConfig:
         # Audio lowpass filter high cut (Hz)
         audioHighCut: 3500
@@ -107,37 +173,19 @@ virtualChannels:
     txGrantDemands: true
     # Announcement Group
     announcementGroup: 65534
+    # Play a tone when an announcement call is received
+    announcementGroupTone: false
     
     #
-    # Talkgroups for this channel
+    # (Optional) Talkgroups for this channel
     #
-    # This is a list of talkgroups which will be available for use
-    # by this virtual channel
+    # This talkgroups list is formatted the same way as the global talkgroups list and 
+    # overrides talkgroups available to this specific channel
     #
     talkgroups:
         # Talkgroup Textual name
-      - name: TG1
+      - name: Secret TG
         # Talkgroup ID
-        destinationId: 1
-        # Talkgroup timeslot (only used for DMR talkgroups)
-        timeslot: 1
-        
-        # Talkgroup Textual name
-      - name: TG2
-        # Talkgroup ID
-        destinationId: 2
-        # Talkgroup timeslot (only used for DMR talkgroups)
-        timeslot: 1
-        # Crypto algorithm ID (0x80 = Clear, 0x81 = DES, 0x84 = AES, 0xAA = ARC4/ADP)
-        algId: 0xAA
-        # Crypto Key ID (loaded from keyfile or FNE)
-        keyId: 0x01
-        # Whether this talkgroup is full-time strapped or selectable encryption
-        strapped: true
-        
-        # Talkgroup Textual name
-      - name: PARROT
-        # Talkgroup ID
-        destinationId: 9990
+        destinationId: 2135
         # Talkgroup timeslot (only used for DMR talkgroups)
         timeslot: 1

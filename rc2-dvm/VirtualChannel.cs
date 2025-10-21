@@ -22,7 +22,10 @@ using NAudio.Dsp;
 using NWaves.Signals;
 using NWaves.Signals.Builders;
 using NWaves.Signals.Builders.Base;
+using NWaves.Audio;
+using NWaves.Operations;
 using Org.BouncyCastle.Asn1;
+using NAudio.Midi;
 
 namespace rc2_dvm
 {
@@ -44,7 +47,7 @@ namespace rc2_dvm
         private AmbeVocoder extHalfRateVocoder;
 #endif
 
-        private WaveFormat waveFormat = new WaveFormat(FneSystemBase.SAMPLE_RATE, FneSystemBase.BITS_PER_SECOND, 1);
+        private NAudio.Wave.WaveFormat waveFormat = new NAudio.Wave.WaveFormat(FneSystemBase.SAMPLE_RATE, FneSystemBase.BITS_PER_SECOND, 1);
 
         private bool callInProgress = false;
 
@@ -72,6 +75,12 @@ namespace rc2_dvm
 
         // MBE Tone Detector
         private MBEToneDetector toneDetector;
+
+        // 9 MBE frames per LDU
+        const int LDU_SAMPLES_LENGTH = FneSystemBase.MBE_SAMPLES_LENGTH * 9;
+
+        // Sounds
+        private short[] toneAtg;
 
         // Whether the channel is "scanning" (able to receive from any talkgroup)
         private bool scanning = false;
@@ -127,6 +136,27 @@ namespace rc2_dvm
 
             // Store encryption settings
             this.keyContainer = keyContainer;
+
+            // Fallback to global audio config if none provided
+            if (Config.AudioConfig == null)
+            {
+                Config.AudioConfig = RC2DVM.Configuration.AudioConfig;
+                Log.Logger.Information("({0:l}) using global audio config", Config.Name);
+            }
+
+            // Fallback to global talkgroup list if none provided
+            if (Config.Talkgroups == null)
+            {
+                // Ensure we have a global list
+                if (RC2DVM.Configuration.Talkgroups == null)
+                    throw new Exception($"Virtual channel {Config.Name} has no talkgroups list and no global talkgroup list defined!");
+                // Load it
+                Config.Talkgroups = RC2DVM.Configuration.Talkgroups;
+                Log.Logger.Information("({0:l}) using global talkgroups list", Config.Name);
+            }
+
+            // Load sounds
+            LoadSounds();
 
 #if WIN32
             // Try to find external AMBE.DLL interop library
@@ -680,6 +710,54 @@ namespace rc2_dvm
                     //DMREncodeAudioFrame(Config.SourceId, CurrentTalkgroup.DestinationId, (byte)CurrentTalkgroup.Timeslot, pcm16Samples);
                 }
             }
+        }
+
+        private void LoadSounds()
+        {
+            Log.Logger.Debug("Loading sounds for virtual channel");
+
+            // Load ATG tone
+            WaveFile atgTone = new WaveFile(rc2_dvm.Properties.Resources.sndAtgTone);
+            DiscreteSignal atgSignal = atgTone.Signals[0] * 0.25f; // -6 dB
+
+            // Resample if needed
+            if (atgSignal.SamplingRate != waveFormat.SampleRate)
+            {
+                Resampler resampler = new Resampler();
+                DiscreteSignal temp = resampler.Resample(atgSignal, waveFormat.SampleRate);
+                atgSignal = temp;
+            }
+
+            // Add silence at the start to account for console unmute delay (200ms seems to be good)
+            atgSignal = atgSignal.Delay(200 * (waveFormat.SampleRate / 1000));
+
+            // Calculate padded length to neatly align with a 9-MBE frame LDU
+            int paddedLength = (int)Math.Ceiling((double)atgSignal.Samples.Length / LDU_SAMPLES_LENGTH) * LDU_SAMPLES_LENGTH;
+
+            // Pad the signal
+            atgSignal = atgSignal.Delay(paddedLength - atgSignal.Samples.Length);
+            //Log.Logger.Debug("Padded ATG tone to {0} samples", paddedLength);
+
+            // Load the final samples into memory
+            toneAtg = Utils.FloatToPcm(atgSignal.Samples);
+        }
+
+        /// <summary>
+        /// Start the ATG tone playing and return the number of P25 MBE frames to skip
+        /// </summary>
+        /// <returns></returns>
+        public int PlayAtgTone()
+        {
+            // Skip if not loaded
+            if (toneAtg == null) { return 0; }
+            // Calculate the number of MBE frames to skip
+            int skipFrames = toneAtg.Length / LDU_SAMPLES_LENGTH;
+            // Debug print
+            Log.Logger.Debug("Sending ATG tone to Radio ({0} samples / {1} LDU frames)", toneAtg.Length, skipFrames);
+            // Send audio
+            dvmRadio.RxSendPCM16Samples(toneAtg, (uint)waveFormat.SampleRate);
+            // Return
+            return skipFrames;
         }
     }
 }
