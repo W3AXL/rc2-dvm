@@ -58,7 +58,7 @@ namespace rc2_dvm
         // Variables for displaying active source ID
         private bool showingSourceId;
         private uint lastSourceId;
-        // private System.Timers.Timer sourceIdTimer;
+
 
         private DVMRadio dvmRadio;
 
@@ -185,10 +185,7 @@ namespace rc2_dvm
                 
             }
 
-            // Init source ID display stuff
-            //sourceIdTimer = new System.Timers.Timer(1000);
-            //sourceIdTimer.Elapsed += sourceIdTimerCallback;
-            //sourceIdTimer.Enabled = true;
+
 
             // Init rx data timeout timer
             rxDataTimer = new System.Timers.Timer(1000);
@@ -281,26 +278,6 @@ namespace rc2_dvm
             dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
         }
 
-        /// <summary>
-        /// Callback to alternate between TG name and source ID
-        /// </summary>
-        /// <param name="source"></param>
-        /// <param name="e"></param>
-        //private void sourceIdTimerCallback(Object source, ElapsedEventArgs e)
-        //{
-        //    if (showingSourceId)
-        //    {
-        //        dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
-        //        dvmRadio.StatusCallback();
-        //        showingSourceId = false;
-        //    }
-        //    else
-        //    {
-        //        //dvmRadio.Status.ChannelName = $"ID: {lastSourceId}";
-        //        dvmRadio.StatusCallback();
-        //        showingSourceId = true;
-        //    }
-        //}
 
         /// <summary>
         /// Function called when the rx data timeout timer is hit, will force-reset the call data on loss of LDUs
@@ -500,8 +477,6 @@ namespace rc2_dvm
         /// </summary>
         private void resetCall()
         {
-            // Stop source ID callback
-            // sourceIdTimer.Stop();
             // Stop rx data timeout timer
             rxDataTimer.Stop();
             // Reset P25 counter
