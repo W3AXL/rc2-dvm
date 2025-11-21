@@ -591,6 +591,8 @@ namespace rc2_dvm
             callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
             FneUtils.Memset(callMi, 0x00, P25Defines.P25_MI_LENGTH);
             callInProgress = false;
+            // Send status
+            dvmRadio.StatusCallback();
         }
 
         /// <summary>
