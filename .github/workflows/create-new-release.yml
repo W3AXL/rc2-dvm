@@ -11,13 +11,19 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+      with:
+          fetch-depth: 0
       
     - name: Create Release
       id: create_release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        gh release create ${{ github.ref_name }}
+        if git show-ref --tags --verify --quiet "refs/tags/${{ github.ref_name }}"; then
+          echo "Release tag ${{ github.ref_name }} already exists, skipping creation..."
+        else
+          gh release create ${{ github.ref_name }}
+        fi
 
   build-release:
     uses: ./.github/workflows/build.yml
