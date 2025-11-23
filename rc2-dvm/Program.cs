@@ -103,7 +103,8 @@ namespace rc2_dvm
                 name: "--config",
                 description: "YAML configuration file to read");
             configFile.AddAlias("-c");
-            configFile.IsRequired = true;
+            configFile.SetDefaultValue(new FileInfo("config.yml"));
+            //configFile.IsRequired = true;
 
             // Root Command
             RootCommand root = new RootCommand("DVM FNE daemon for RadioConsole2");
@@ -143,10 +144,15 @@ namespace rc2_dvm
                 // Start main runtime
                 Runtime();
             }
+            catch (FileNotFoundException)
+            {
+                Console.WriteLine($"Could not find config file {configFile.FullName}! Please ensure the file exists and try again");
+                Environment.Exit((int)ERRNO.ENOCONFIG);
+            }
             catch (Exception e)
             {
                 Console.WriteLine($"Failed to read configuration file {configFile}\n{e.ToString()}");
-                Environment.Exit((int)ERRNO.ENOCONFIG);
+                Environment.Exit((int)ERRNO.EBADCONFIG);
             }
         }
 
