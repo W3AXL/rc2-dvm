@@ -103,8 +103,9 @@ namespace rc2_dvm
                 name: "--config",
                 description: "YAML configuration file to read");
             configFile.AddAlias("-c");
-            configFile.SetDefaultValue(new FileInfo("config.yml"));
-            //configFile.IsRequired = true;
+            // Default config path should be the same directory as the exe
+            string executingDirectory = System.AppContext.BaseDirectory;
+            configFile.SetDefaultValue(new FileInfo(executingDirectory + "config.yml"));
 
             // Root Command
             RootCommand root = new RootCommand("DVM FNE daemon for RadioConsole2");
