@@ -697,6 +697,8 @@ namespace rc2_dvm
                 return false;
             }
             Log.Logger.Information("({0:l}) Stop TX on TG {1} ({2})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
+            // Send call termination notification
+            RC2DVM.fneSystem.SendDVMCallTermination(Config.SourceId, CurrentTalkgroup.DestinationId);
             // Send TDU
             RC2DVM.fneSystem.SendP25TDU(Config.SourceId, CurrentTalkgroup.DestinationId);
             // Reset call
