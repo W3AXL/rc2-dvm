@@ -509,7 +509,7 @@ namespace rc2_dvm
                 
                 // Start source ID display callback
                 lastSourceId = e.SrcId;
-                sourceIdTimer.Start();
+                dvmRadio.Status.CallerId = lastSourceId.ToString();
                 // Start RX data timeout timer
                 rxDataTimer.Start();
                 // Status update
@@ -545,10 +545,10 @@ namespace rc2_dvm
                 // Update state
                 dvmRadio.Status.State = rc2_core.RadioState.Idle;
                 // Stop source ID callback
-                sourceIdTimer.Stop();
                 dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
                 // Stop RX data timeout timer
                 rxDataTimer.Stop();
+                dvmRadio.Status.CallerId = "";
                 // Status update
                 dvmRadio.StatusCallback();
                 // Log
