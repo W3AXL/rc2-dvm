@@ -59,7 +59,7 @@ network:
 #
 # This applies to any virtual channels that don't have their own audioConfig blocks
 #
-audioConfig:
+audio:
     # Audio lowpass filter high cut (Hz)
     audioHighCut: 3500
     # Post-vocoder RX audio gain
@@ -151,7 +151,7 @@ virtualChannels:
     mode: 2
     
     # (Optional) Vocoder Audio Configuration can override global audio config for a single channel
-    audioConfig:
+    audio:
         # Audio lowpass filter high cut (Hz)
         audioHighCut: 3500
         # Post-vocoder RX audio gain

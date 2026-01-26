@@ -165,7 +165,7 @@ namespace rc2_dvm
         /// <summary>
         /// Audio configuration for this virtual channel's vocoder (overrides global audio config)
         /// </summary>
-        public AudioConfigObject? AudioConfig;
+        public AudioConfigObject? Audio;
         /// <summary>
         /// Source ID (aka Radio ID) for this virtual channel
         /// </summary>
@@ -201,7 +201,7 @@ namespace rc2_dvm
         /// <summary>
         /// Override of global scan config for this virtual channel only
         /// </summary>
-        public ScanConfigObject? ScanConfig;
+        public ScanConfigObject? Scan;
     }
 
     /// <summary>
@@ -292,11 +292,11 @@ namespace rc2_dvm
         /// <summary>
         /// Global Audio Config
         /// </summary>
-        public AudioConfigObject AudioConfig = new AudioConfigObject();
+        public AudioConfigObject Audio = new AudioConfigObject();
         /// <summary>
         /// Global Scan Config
         /// </summary>
-        public ScanConfigObject ScanConfig = new ScanConfigObject();
+        public ScanConfigObject Scan = new ScanConfigObject();
         /// <summary>
         /// Global List of Talkgroups
         /// </summary>
