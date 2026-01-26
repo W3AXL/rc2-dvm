@@ -83,8 +83,11 @@ namespace rc2_dvm
         private short[] toneAtg;
 
         // Whether the channel is "scanning" (able to receive from any talkgroup)
-        private bool scanning = false;
-        public bool Scanning { get { return scanning; } }
+        public bool Scanning { get; private set; }
+        // The channel index we've landed on during scan (null is default state)
+        private TalkgroupConfigObject? scanLandedTg = null;
+        // Timer for waiting on a channel after it's landed before returning to the selected channel
+        private System.Timers.Timer scanHangTimer;
 
         /// <summary>
         /// State variable to keep track of whether secure is turned on or off
@@ -123,6 +126,11 @@ namespace rc2_dvm
         }
 
         /// <summary>
+        /// The talkgroup currently being transmitted on
+        /// </summary>
+        private TalkgroupConfigObject? txTalkgroup = null;
+
+        /// <summary>
         /// The index of the home talkgroup in the talkgroup list
         /// </summary>
         private int homeTalkgroupIndex = -1;
@@ -158,6 +166,16 @@ namespace rc2_dvm
                 // Load it
                 Config.Talkgroups = RC2DVM.Configuration.Talkgroups;
                 Log.Logger.Information("({0:l}) using global talkgroups list", Config.Name);
+            }
+
+            // Fallback to global scan config if none provided
+            if (Config.ScanConfig == null)
+            {
+                // Ensure we have a global list
+                if (RC2DVM.Configuration.ScanConfig == null)
+                    throw new Exception($"Virtual channel {Config.Name} has no scan configuration and no global scan configuration defined!");
+                // Load it
+                Config.ScanConfig = RC2DVM.Configuration.ScanConfig;
             }
 
             // Load home talkgroup
@@ -266,6 +284,12 @@ namespace rc2_dvm
             {
                 affHoldoffTimer.Enabled = false;
             }
+
+            // Initialize scan hang timer
+            scanHangTimer = new System.Timers.Timer(Config.ScanConfig.Hangtime);
+            scanHangTimer.Elapsed += scanHangTimerCallback;
+            scanHangTimer.Enabled = false;
+            scanHangTimer.AutoReset = false;
                 
             // initialize slot statuses
             status = new SlotStatus[3];
@@ -293,11 +317,12 @@ namespace rc2_dvm
                 Log.Logger.Information("        TX Tone Valid Range: {TxToneLowerLimit} Hz to {TxToneUpperLimit} Hz", Config.AudioConfig.TxToneLowerLimit, Config.AudioConfig.TxToneUpperLimit);
             }
             Log.Logger.Information("    Mode: {Mode:l}", Config.Mode.ToString());
+            // Print ATG info
             if (Config.AnnouncementGroup > 0)
             {
                 Log.Logger.Information("    Announcement Group: {ATG:l}", Config.AnnouncementGroup.ToString());
             }
-            
+            // Print configured talkgroups
             Log.Logger.Information("    Talkgroups ({TGCount}):", Config.Talkgroups.Count);
             foreach (TalkgroupConfigObject talkgroup in Config.Talkgroups)
             {
@@ -306,14 +331,19 @@ namespace rc2_dvm
                     encStr = $", {Enum.GetName(typeof(Algorithm), talkgroup.AlgId)} Key ID {talkgroup.KeyId}, {(talkgroup.Strapped ? "STRAPPED" : "SELECTABLE")}";
                 if (Config.Mode == VocoderMode.DMR)
                 {
-                    Log.Logger.Information("        TGID {DestinationId} TS {Timeslot} ({Name:l}){Enc:l}", talkgroup.DestinationId, talkgroup.Timeslot, talkgroup.Name, encStr);
+                    Log.Logger.Information("      {Scan:l} TGID {DestinationId} TS {Timeslot} ({Name:l}){Enc:l}", talkgroup.Scan ? "S" : " ", talkgroup.DestinationId, talkgroup.Timeslot, talkgroup.Name, encStr);
                 }
                 else
                 {
-                    Log.Logger.Information("        TGID {DestinationId} ({Name:l}){Enc:l}", talkgroup.DestinationId, talkgroup.Name, encStr);
+                    Log.Logger.Information("      {Scan:l} TGID {DestinationId} ({Name:l}){Enc:l}", talkgroup.Scan ? "S" : " ", talkgroup.DestinationId, talkgroup.Name, encStr);
                 }    
             }
+            // Print Home Talkgroup
             Log.Logger.Information("    Home Talkgroup: {0}", homeTalkgroupIndex >= 0 ? Config.HomeTalkgroup : "None");
+            // Print Scan Configuration
+            Log.Logger.Information("    Scan Configuration:");
+            Log.Logger.Information("        Talkback: {talkback:l}", Config.ScanConfig.Talkback ? "Enabled" : "Disabled");
+            Log.Logger.Information("        Hangtime: {hangtime} ms", Config.ScanConfig.Hangtime);
 
             // Initialize new DVM radio
             dvmRadio = new DVMRadio(
@@ -337,7 +367,12 @@ namespace rc2_dvm
         {
             if (showingSourceId)
             {
-                dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
+                // We show either the selected TG name or the scan landed name
+                if (scanLandedTg != null)
+                    dvmRadio.Status.ChannelName = scanLandedTg.Name;
+                else
+                    dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
+                // Update status
                 dvmRadio.StatusCallback();
                 showingSourceId = false;
             }
@@ -596,6 +631,22 @@ namespace rc2_dvm
         }
 
         /// <summary>
+        /// Callback fired when the scan hang timer elapses
+        /// </summary>
+        private void scanHangTimerCallback(Object source, ElapsedEventArgs e)
+        {
+            // Debug
+            Log.Logger.Debug("({0:l}) Scan hang timer expiration, reverting to seleted talkgroup", Config.Name);
+            // Stop the hang timer
+            scanHangTimer.Stop();
+            // Reset the channel text & update status
+            dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
+            dvmRadio.StatusCallback();
+            // Reset the landed tg
+            scanLandedTg = null;
+        }
+
+        /// <summary>
         /// Return whether or not the virtual channel is configured for the specified talkgroup/timeslot
         /// </summary>
         /// <param name="tgid"></param>
@@ -640,31 +691,73 @@ namespace rc2_dvm
         }
 
         /// <summary>
+        /// Returns whether the given talkgroup is in the channel's scanlist
+        /// </summary>
+        /// <param name="tgid"></param>
+        /// <param name="slot"></param>
+        public bool HasTgInScanlist(VocoderMode mode, uint tgid, uint slot = 1)
+        {
+            if (mode != Config.Mode) { return false; }
+
+            if (Config.Mode == VocoderMode.DMR)
+            {
+                return Config.Talkgroups?.Any(tg => tg.DestinationId == tgid && tg.Timeslot == slot && tg.Scan == true) ?? false;
+            }
+            else
+            {
+                return Config.Talkgroups?.Any(tg => tg.DestinationId == tgid && tg.Scan == true) ?? false;
+            }
+        }
+
+        /// <summary>
         /// Initiate transmit to the system
         /// </summary>
         /// <returns>True if granted, false if not</returns>
         public bool StartTransmit()
         {
-            // Check if talkgroup is active and return false if true
-            if (RC2DVM.fneSystem.IsTalkgroupActive(CurrentTalkgroup.DestinationId, CurrentTalkgroup.Timeslot))
+            // By default, the talkgroup we're going to transmit on is the currently selected talkgroup
+            txTalkgroup = CurrentTalkgroup;
+
+            // This checks if we're scanning and landed on a channel
+            if (Scanning && scanLandedTg != null)
             {
-                Log.Logger.Debug("({0:l}) Cannot transmit on TG {1} ({2}), call in progress", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
+                // If talkback is enabled, we want to transmit on the landed channel
+                if (Config.ScanConfig.Talkback)
+                {
+                    txTalkgroup = scanLandedTg;
+                    Log.Logger.Debug("({0:l}) Scan talkback enabled, transmitting on landed talkgroup {tg} ({id})", Config.Name, txTalkgroup.Name, txTalkgroup.DestinationId);
+                }
+                // Otherwise we reset the landed channel to none & reset the channel name
+                else
+                {
+                    scanLandedTg = null;
+                    dvmRadio.Status.ChannelName = txTalkgroup.Name;
+                    Log.Logger.Debug("({0:l}) Scan talkback disabled, reverting to selected talkgroup {tg} ({id)", Config.Name, txTalkgroup.Name, txTalkgroup.DestinationId);
+                }
+                // Either way, we stop the scan hang timer for the duration of the TX
+                Log.Logger.Debug("({0:l}) TX starting, scan hang timer stopped", Config.Name);
+                scanHangTimer.Stop();
+            }
+
+            // Check if talkgroup is active and return false if true
+            if (RC2DVM.fneSystem.IsTalkgroupActive(txTalkgroup.DestinationId, txTalkgroup.Timeslot))
+            {
+                Log.Logger.Debug("({0:l}) Cannot transmit on TG {1} ({2}), call in progress", Config.Name, txTalkgroup.Name, txTalkgroup.DestinationId);
                 return false;
             }
             // "Grab" the talkgroup
-            if (RC2DVM.fneSystem.AddActiveTalkgroup(CurrentTalkgroup.DestinationId, CurrentTalkgroup.Timeslot))
+            if (RC2DVM.fneSystem.AddActiveTalkgroup(txTalkgroup.DestinationId, txTalkgroup.Timeslot))
             {
-                
                 // Setup Crypto
-                if (CurrentTalkgroup.KeyId != 0 && (Secure || CurrentTalkgroup.Strapped))
+                if (txTalkgroup.KeyId != 0 && (Secure || txTalkgroup.Strapped))
                 {
-                    crypto.SetKey(CurrentTalkgroup.KeyId, CurrentTalkgroup.AlgId, loadedKeys[CurrentTalkgroup.KeyId].GetKey());
-                    Log.Logger.Information("({0:l}) Start ENC TX on TG {1} ({2})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
+                    crypto.SetKey(txTalkgroup.KeyId, txTalkgroup.AlgId, loadedKeys[txTalkgroup.KeyId].GetKey());
+                    Log.Logger.Information("({0:l}) Start ENC TX on TG {1} ({2})", Config.Name, txTalkgroup.Name, txTalkgroup.DestinationId);
                 }
                 else
                 {
-                    crypto.SetKey(CurrentTalkgroup.KeyId, P25Defines.P25_ALGO_UNENCRYPT, new byte[7]);
-                    Log.Logger.Information("({0:l}) Start TX on TG {1} ({2})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
+                    crypto.SetKey(txTalkgroup.KeyId, P25Defines.P25_ALGO_UNENCRYPT, new byte[7]);
+                    Log.Logger.Information("({0:l}) Start TX on TG {1} ({2})", Config.Name, txTalkgroup.Name, txTalkgroup.DestinationId);
                 }
 
                 // Get new stream ID
@@ -672,7 +765,7 @@ namespace rc2_dvm
                 // Send Grant Demand if enabled
                 if (Config.TxGrantDemands)
                 {
-                    RC2DVM.fneSystem.SendP25TDU(Config.SourceId, CurrentTalkgroup.DestinationId, true);
+                    RC2DVM.fneSystem.SendP25TDU(Config.SourceId, txTalkgroup.DestinationId, true);
                 }
                 // Update status to transmitting
                 dvmRadio.Status.State = RadioState.Transmitting;
@@ -696,18 +789,30 @@ namespace rc2_dvm
             {
                 return false;
             }
-            Log.Logger.Information("({0:l}) Stop TX on TG {1} ({2})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
-            // Send call termination notification
-            RC2DVM.fneSystem.SendDVMCallTermination(Config.SourceId, CurrentTalkgroup.DestinationId);
-            // Send TDU
-            RC2DVM.fneSystem.SendP25TDU(Config.SourceId, CurrentTalkgroup.DestinationId);
+            // Catch a null tx talkgroup (shouldn't happen)
+            if (txTalkgroup == null)
+            {
+                Log.Logger.Error("({0:l}) Cannot stop TX, txTalkgroup is null!");
+                return false;
+            }
+            // Log
+            Log.Logger.Information("({0:l}) Stop TX on TG {1} ({2})", Config.Name, txTalkgroup.Name, txTalkgroup.DestinationId);
+            // Send TDU via helper
+            SendP25TDU(Config.SourceId, txTalkgroup.DestinationId, true);
             // Reset call
             resetCall();
+            // Restart the scan hang timer if Scanning
+            if (Scanning)
+            {
+                Log.Logger.Debug("({0:l}) Transmit done, restarting scan hang timer", Config.Name);
+                scanHangTimer.Stop();
+                scanHangTimer.Start();
+            }
             // Update radio status
             dvmRadio.Status.State = RadioState.Idle;
             dvmRadio.StatusCallback();
             // Remove active TG
-            return RC2DVM.fneSystem.RemoveActiveTalkgroup(CurrentTalkgroup.DestinationId, CurrentTalkgroup.Timeslot);
+            return RC2DVM.fneSystem.RemoveActiveTalkgroup(txTalkgroup.DestinationId, txTalkgroup.Timeslot);
         }
 
         /// <summary>
@@ -819,6 +924,25 @@ namespace rc2_dvm
             if (homeTalkgroupIndex < 0) { return false; }
             // Goto channel if configured
             return ChannelIndex(homeTalkgroupIndex);
+        }
+
+        /// <summary>
+        /// Toggle the scan state of the virtual channel
+        /// </summary>
+        public void ToggleScan()
+        {
+            if (Scanning)
+            {
+                Scanning = false;
+                Log.Logger.Debug("({0:l}) Scan disabled, stopping hang timer", Config.Name);
+                scanHangTimer.Stop();
+                scanLandedTg = null;
+            }
+            else
+            {
+                Scanning = true;
+                Log.Logger.Debug("({0:l}) Scan enabled", Config.Name);
+            }
         }
     }
 }

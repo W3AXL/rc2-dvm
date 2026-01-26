@@ -86,6 +86,16 @@ audioConfig:
     txToneUpperLimit: 2000
 
 #
+# (Optional) Scan Configuration
+#
+scan:
+  # Whether talkback is enabled (default: false)
+  # Talkback allows you to transmit on a channel that scan has landed on within the scan hangtime
+  talkback: false
+  # Scan hangtime to wait on a landed channel before returning to the selected channel (in ms, default: 3000)
+  hangtime: 3000
+
+#
 # (Optional) Global Talkgroups List
 #
 # This avoids having to repeat a talkgroup list for multiple channels
@@ -98,6 +108,8 @@ talkgroups:
     destinationId: 1
     # Talkgroup timeslot (only used for DMR talkgroups)
     timeslot: 1
+    # Whether this talkgroup is included in the scanlist (default: true)
+    scan: false
         
     # Talkgroup Textual name
   - name: TG2
@@ -192,3 +204,8 @@ virtualChannels:
 
     # The talkgroup that this channel starts on, and reverts to on a press of the HOME softkey
     homeTalkgroup: "TG2"
+
+    # You can also override the global scan config per-virtual channel as shown here
+    scan:
+      talkback: true
+      hangtime: 2000

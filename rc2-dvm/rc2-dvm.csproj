@@ -3,8 +3,8 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
-	<PublishSingleFile>true</PublishSingleFile>
-	<SelfContained>true</SelfContained>
+	  <PublishSingleFile>true</PublishSingleFile>
+	  <SelfContained>true</SelfContained>
     <RootNamespace>rc2_dvm</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -15,7 +15,8 @@
     <Platforms>x86;AnyCPU</Platforms>
     <PlatformTarget>x86</PlatformTarget>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
-	<DefineConstants>$(ExtraConstants)</DefineConstants>
+	  <DefineConstants>$(ExtraConstants)</DefineConstants>
+	  <PublishTrimmed>True</PublishTrimmed>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x86'">

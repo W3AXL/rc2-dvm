@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 
 using fnecore;
 using fnecore.P25;
+using System.CommandLine;
 
 namespace rc2_dvm
 {
@@ -95,6 +96,7 @@ namespace rc2_dvm
     /// </summary>
     public enum Algorithm : byte
     {
+        CLEAR   = P25Defines.P25_ALGO_UNENCRYPT,
         DES     = P25Defines.P25_ALGO_DES,
         AES     = P25Defines.P25_ALGO_AES,
         ARC4    = P25Defines.P25_ALGO_ARC4,
@@ -129,6 +131,10 @@ namespace rc2_dvm
         /// Encryption strapped or toglable
         /// </summary>
         public bool Strapped = false;
+        /// <summary>
+        /// Whether or not this talkgroup is included in the scanlist
+        /// </summary>
+        public bool Scan = true;
     }
 
     /// <summary>
@@ -192,6 +198,10 @@ namespace rc2_dvm
         /// Whether to play a tone when an ATG call is received
         /// </summary>
         public bool AnnouncementGroupTone = false;
+        /// <summary>
+        /// Override of global scan config for this virtual channel only
+        /// </summary>
+        public ScanConfigObject? ScanConfig;
     }
 
     /// <summary>
@@ -253,6 +263,18 @@ namespace rc2_dvm
         public string KeyFile = "";
     }
 
+    public class ScanConfigObject
+    {
+        /// <summary>
+        /// Whether talkback is enabled
+        /// </summary>
+        public bool Talkback = false;
+        /// <summary>
+        /// Hangtime to stay on a channel before reverting
+        /// </summary>
+        public int Hangtime = 3000;
+    }
+
     public class ConfigObject
     {
         /// <summary>
@@ -271,6 +293,10 @@ namespace rc2_dvm
         /// Global Audio Config
         /// </summary>
         public AudioConfigObject AudioConfig = new AudioConfigObject();
+        /// <summary>
+        /// Global Scan Config
+        /// </summary>
+        public ScanConfigObject ScanConfig = new ScanConfigObject();
         /// <summary>
         /// Global List of Talkgroups
         /// </summary>

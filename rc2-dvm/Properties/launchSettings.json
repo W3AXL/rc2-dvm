@@ -4,6 +4,11 @@
       "commandName": "Project",
       "commandLineArgs": "-c config.yml",
       "workingDirectory": "H:\\Git\\rc2-dvm\\rc2-dvm"
+    },
+    "rc2-dvm nx config": {
+      "commandName": "Project",
+      "commandLineArgs": "-c config-nx.yml",
+      "workingDirectory": "H:\\Git\\rc2-dvm\\rc2-dvm"
     }
   }
 }

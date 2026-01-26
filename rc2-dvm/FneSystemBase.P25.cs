@@ -491,9 +491,11 @@ namespace rc2_dvm
                     }
                 }
 
-                // Find any channels which are currently on this talkgroup or ATG
+                // Send this data to every virtual channel, the channel will handle it as appropriate for its state
                 foreach (VirtualChannel channel in RC2DVM.VirtualChannels)
                 {
+                    channel.P25DataReceived(e, pktTime);
+                    /**
                     // Don't send to channels that are transmitting
                     if (channel.IsTransmitting()) {
                         Log.Logger.Debug("({0:l}) Not sending data from P25 TG {1} to channel {2:l}, channel is currently transmitting", RC2DVM.fneSystem.SystemName, e.DstId, channel.Config.Name);
@@ -511,6 +513,7 @@ namespace rc2_dvm
                         Log.Logger.Debug("({0:l}) P25 ATG {1} {2:l} -> {3:l}", RC2DVM.fneSystem.SystemName, e.DstId, Enum.GetName(typeof(P25DUID), e.DUID), channel.Config.Name);
                         channel.P25DataReceived(e, pktTime);
                     }
+                    // Send to any channel with the talkgroup in its scanlist*/
                 }
 
                 return;

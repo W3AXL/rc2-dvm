@@ -1,21 +1,22 @@
-﻿using fnecore.P25;
-using fnecore;
+﻿using fnecore;
+using fnecore.P25;
+using NAudio.Dsp;
 using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
+using NWaves;
+using NWaves.Filters;
+using NWaves.Filters.OnePole;
+using NWaves.Signals;
 using Serilog;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Net.Sockets;
-using System.Net;
-using System.Text;
-using System.Threading.Tasks;
-using NAudio.Dsp;
-using NWaves;
 using System.ComponentModel;
-using NWaves.Filters;
-using NWaves.Filters.OnePole;
-using NAudio.Wave.SampleProviders;
-using NWaves.Signals;
+using System.Linq;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading.Channels;
+using System.Threading.Tasks;
 
 namespace rc2_dvm
 {
@@ -48,9 +49,20 @@ namespace rc2_dvm
         /// <param name="srcId"></param>
         /// <param name="dstId"></param>
         /// <param name="grantDemand"></param>
-        private void SendP25TDU(uint srcId, uint dstId, bool grantDemand = false)
+        private void SendP25TDU(uint srcId, uint dstId, bool grantDemand = false, bool callTerm = false)
         {
-            RC2DVM.fneSystem.SendP25TDU(srcId, dstId, grantDemand);
+            // Send optional call termination
+            if (callTerm)
+                RC2DVM.fneSystem.SendDVMCallTermination(srcId, dstId);
+
+            // Send the TDU once if grant demand is enabled
+            if (grantDemand)
+                RC2DVM.fneSystem.SendP25TDU(srcId, dstId, grantDemand);
+            else
+            {
+                for (int i = 0; i < 4; i++)
+                    RC2DVM.fneSystem.SendP25TDU(srcId, dstId, grantDemand);
+            }
 
             p25SeqNo = 0;
             p25N = 0;
@@ -440,7 +452,55 @@ namespace rc2_dvm
         /// <param name="e"></param>
         public void P25DataReceived(P25DataReceivedEvent e, DateTime pktTime)
         {
+            // First, we validate if we should do anything with this data
+            // Ignore if we're transmitting
+            if (IsTransmitting())
+            {
+                Log.Logger.Debug("({0:l}) Ignoring data from P25 TGID {1}, channel is currently transmitting", Config.Name, e.DstId);
+                return;
+            }
+            // See if we have the TG selected
+            if (IsTalkgroupSelected(VocoderMode.P25, e.DstId))
+            {
+                Log.Logger.Debug("({0:l}) P25 RX {1} {2:l}", Config.Name, e.DstId, Enum.GetName(typeof(P25DUID), e.DUID));
+            }
+            // See if this TG is configured as an announcement TG
+            else if (Config.AnnouncementGroup == e.DstId)
+            {
+                Log.Logger.Debug("({0:l}) P25 ATG {1} {2:l}", Config.Name, e.DstId, Enum.GetName(typeof(P25DUID), e.DUID));
+            }
+            // Scan RX handler for talkgroups in the scanlist
+            else if (Scanning && HasTgInScanlist(Config.Mode, e.DstId))
+            {
+                // Ignore if we're within a hang time and a different tg is currently landed
+                if (scanHangTimer.Enabled && (scanLandedTg?.DestinationId != e.DstId))
+                {
+                    Log.Logger.Debug("({0:l}) Ignoring data from P25 TGID {tgid}, scan hang timer running for another TG ({landedId})", Config.Name, e.DstId, scanLandedTg.DestinationId);
+                    return;
+                }
+                // If the talkgroup is in the scanlist, (re)start the scan hang timer and indicate we've landed on a channel
+                else
+                {
+                    // Get the talkgroup
+                    TalkgroupConfigObject? tg = Config.Talkgroups?.FirstOrDefault(t => t.DestinationId == e.DstId);
+                    // Log Print
+                    Log.Logger.Debug("({0:l}) P25 SCAN RX {1} ({2:l})", Config.Name, e.DstId, Enum.GetName(e.DUID));
+                    // Start the scan hang timer and land this channel
+                    scanHangTimer.Stop();
+                    scanHangTimer.Start();
+                    scanLandedTg = tg;
+                    // Update the channel name
+                    dvmRadio.Status.ChannelName = tg.Name;
+                }
+            }
+            // Ignore all other conditions
+            else
+            {
+                //Log.Logger.Debug("({0:l) Ignoring data from P25 TGID {1}, not scanning and not configured for this TG", Config.Name, e.DstId);
+                return;
+            }
 
+            // Process the call
             uint sysId = (uint)((e.Data[11U] << 8) | (e.Data[12U] << 0));
             uint netId = FneUtils.Bytes3ToUInt32(e.Data, 16);
             byte control = e.Data[14U];
@@ -462,27 +522,30 @@ namespace rc2_dvm
                     // Copy MI
                     Array.Copy(e.Data, 184, callMi, 0, P25Defines.P25_MI_LENGTH);
                     
-                    // Validate key
-                    if (Config.StrictKeyMapping && callKeyId != CurrentTalkgroup.KeyId)
+                    // Only setup crypto for non-clear calls
+                    if (callAlgoId != P25Defines.P25_ALGO_UNENCRYPT)
                     {
-                        Log.Logger.Warning("({0:l}) P25D: Ignoring traffic for non-matching key ID 0x{keyID:X4}", Config.Name, callKeyId);
-                        ignoreCall = true;
+                        // Validate key
+                        if (Config.StrictKeyMapping && callKeyId != CurrentTalkgroup.KeyId)
+                        {
+                            Log.Logger.Warning("({0:l}) P25D: Ignoring traffic for non-matching key ID 0x{keyID:X4} (AlgId 0x{algid:X2})", Config.Name, callKeyId, callAlgoId);
+                            ignoreCall = true;
+                        }
+                        else if (!loadedKeys.ContainsKey(callKeyId))
+                        {
+                            Log.Logger.Warning("({0:l}) P25D: Ignoring traffic for missing key ID 0x{keyID:X4} (AlgId 0x{algid:X2})", Config.Name, callKeyId, callAlgoId);
+                            ignoreCall = true;
+                        }
+                        else
+                        {
+                            // Set Key
+                            crypto.SetKey(callKeyId, callAlgoId, loadedKeys[callKeyId].GetKey());
+                            // Set up crypto engine
+                            crypto.Prepare(callAlgoId, callKeyId, callMi);
+                            // Log
+                            Log.Logger.Debug("({0:l}) Preparing decryption for Key ID {keyID:X4} ({algo:l})", Config.Name, CurrentTalkgroup.KeyId, Enum.GetName(typeof(Algorithm), CurrentTalkgroup.AlgId));
+                        }
                     }
-                    else if (!loadedKeys.ContainsKey(callKeyId))
-                    {
-                        Log.Logger.Warning("({0:l}) P25D: Ignoring traffic for missing key ID 0x{keyID:X4}", Config.Name, callKeyId);
-                        ignoreCall = true;
-                    }
-                    else
-                    {
-                        // Set Key
-                        crypto.SetKey(callKeyId, callAlgoId, loadedKeys[callKeyId].GetKey());
-                        // Set up crypto engine
-                        crypto.Prepare(callAlgoId, callKeyId, callMi);
-                        // Log
-                        Log.Logger.Debug("({0:l}) Preparing decryption for Key ID {keyID:X4} ({algo:l})", Config.Name, CurrentTalkgroup.KeyId, Enum.GetName(typeof(Algorithm), CurrentTalkgroup.AlgId));
-                    }
-                    
                 }
             }
 
@@ -546,7 +609,11 @@ namespace rc2_dvm
                 dvmRadio.Status.State = rc2_core.RadioState.Idle;
                 // Stop source ID callback
                 sourceIdTimer.Stop();
-                dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
+                // Update channel name based on whether it's a landed scan channel or not
+                if (scanLandedTg != null)
+                    dvmRadio.Status.ChannelName = scanLandedTg.Name;
+                else
+                    dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
                 // Stop RX data timeout timer
                 rxDataTimer.Stop();
                 // Status update
