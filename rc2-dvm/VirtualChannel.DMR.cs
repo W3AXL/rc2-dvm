@@ -247,13 +247,13 @@ namespace rc2_dvm
                         }
 
                         // post-process: apply gain to decoded audio frames
-                        if (Config.AudioConfig.RxAudioGain != 1.0f)
+                        if (Config.Audio.RxAudioGain != 1.0f)
                         {
                             BufferedWaveProvider buffer = new BufferedWaveProvider(waveFormat);
                             buffer.AddSamples(pcm, 0, pcm.Length);
 
                             VolumeWaveProvider16 gainControl = new VolumeWaveProvider16(buffer);
-                            gainControl.Volume = Config.AudioConfig.RxAudioGain;
+                            gainControl.Volume = Config.Audio.RxAudioGain;
                             gainControl.Read(pcm, 0, pcm.Length);
                         }
 

@@ -151,9 +151,9 @@ namespace rc2_dvm
             this.keyContainer = keyContainer;
 
             // Fallback to global audio config if none provided
-            if (Config.AudioConfig == null)
+            if (Config.Audio == null)
             {
-                Config.AudioConfig = RC2DVM.Configuration.AudioConfig;
+                Config.Audio = RC2DVM.Configuration.Audio;
                 Log.Logger.Information("({0:l}) using global audio config", Config.Name);
             }
 
@@ -169,13 +169,13 @@ namespace rc2_dvm
             }
 
             // Fallback to global scan config if none provided
-            if (Config.ScanConfig == null)
+            if (Config.Scan == null)
             {
                 // Ensure we have a global list
-                if (RC2DVM.Configuration.ScanConfig == null)
+                if (RC2DVM.Configuration.Scan == null)
                     throw new Exception($"Virtual channel {Config.Name} has no scan configuration and no global scan configuration defined!");
                 // Load it
-                Config.ScanConfig = RC2DVM.Configuration.ScanConfig;
+                Config.Scan = RC2DVM.Configuration.Scan;
             }
 
             // Load home talkgroup
@@ -255,15 +255,15 @@ namespace rc2_dvm
             rxDataTimer.Elapsed += rxDataTimeout;
 
             // Init filters for TX & RX audio
-            float high_cutoff = (float)Config.AudioConfig.AudioHighCut / (float)waveFormat.SampleRate;
+            float high_cutoff = (float)Config.Audio.AudioHighCut / (float)waveFormat.SampleRate;
             txAudioFilter = new LowPassFilter(high_cutoff, 8);
             rxAudioFilter = new LowPassFilter(high_cutoff, 8);
 
             // Tone detector
-            toneDetector = new MBEToneDetector(Config.AudioConfig.TxToneRatio, Config.AudioConfig.TxToneHits, Config.AudioConfig.TxToneLowerLimit, Config.AudioConfig.TxToneUpperLimit);
+            toneDetector = new MBEToneDetector(Config.Audio.TxToneRatio, Config.Audio.TxToneHits, Config.Audio.TxToneLowerLimit, Config.Audio.TxToneUpperLimit);
 
             // TX Local Repeat Audio
-            if (Config.AudioConfig.TxLocalRepeat)
+            if (Config.Audio.TxLocalRepeat)
             {
                 waveOut = new WaveOutEvent();
                 waveOut.DeviceNumber = 0;
@@ -286,7 +286,7 @@ namespace rc2_dvm
             }
 
             // Initialize scan hang timer
-            scanHangTimer = new System.Timers.Timer(Config.ScanConfig.Hangtime);
+            scanHangTimer = new System.Timers.Timer(Config.Scan.Hangtime);
             scanHangTimer.Elapsed += scanHangTimerCallback;
             scanHangTimer.Enabled = false;
             scanHangTimer.AutoReset = false;
@@ -302,19 +302,19 @@ namespace rc2_dvm
             Log.Logger.Information("    Source ID: {SourceId}", Config.SourceId);
             Log.Logger.Information("    Listening on: {ListenAddress:l}:{ListenPort}", Config.ListenAddress, Config.ListenPort);
             Log.Logger.Information("    Audio Config:");
-            Log.Logger.Information("        Audio Lowpass:       {AudioHighCut} Hz", Config.AudioConfig.AudioHighCut);
-            Log.Logger.Information("        RX Audio Gain:       {RxAudioGain}", Config.AudioConfig.RxAudioGain);
-            Log.Logger.Information("        RX Vocoder Gain:     {RxVocoderGain}", Config.AudioConfig.RxVocoderGain);
-            Log.Logger.Information("        RX Vocoder AGC:      {RxVocoderAGC}", Config.AudioConfig.RxVocoderAGC);
-            Log.Logger.Information("        TX Audio Gain:       {TxAudioGain}", Config.AudioConfig.TxAudioGain);
-            Log.Logger.Information("        TX Vocoder Gain:     {TxVocoderGain}", Config.AudioConfig.TxVocoderGain);
-            Log.Logger.Information("        TX Local Repeat:     {TxLocalRepeat}", Config.AudioConfig.TxLocalRepeat);
-            Log.Logger.Information("        TX Tone Detection:   {TxToneDetection}", Config.AudioConfig.TxToneDetection);
-            if (Config.AudioConfig.TxToneDetection)
+            Log.Logger.Information("        Audio Lowpass:       {AudioHighCut} Hz", Config.Audio.AudioHighCut);
+            Log.Logger.Information("        RX Audio Gain:       {RxAudioGain}", Config.Audio.RxAudioGain);
+            Log.Logger.Information("        RX Vocoder Gain:     {RxVocoderGain}", Config.Audio.RxVocoderGain);
+            Log.Logger.Information("        RX Vocoder AGC:      {RxVocoderAGC}", Config.Audio.RxVocoderAGC);
+            Log.Logger.Information("        TX Audio Gain:       {TxAudioGain}", Config.Audio.TxAudioGain);
+            Log.Logger.Information("        TX Vocoder Gain:     {TxVocoderGain}", Config.Audio.TxVocoderGain);
+            Log.Logger.Information("        TX Local Repeat:     {TxLocalRepeat}", Config.Audio.TxLocalRepeat);
+            Log.Logger.Information("        TX Tone Detection:   {TxToneDetection}", Config.Audio.TxToneDetection);
+            if (Config.Audio.TxToneDetection)
             {
-                Log.Logger.Information("        TX Tone Threshold:   {Config.AudioConfig.TxToneRatio}", Config.AudioConfig.TxToneRatio);
-                Log.Logger.Information("        TX Tone Hits:        {Config.AudioConfig.TxToneHits}", Config.AudioConfig.TxToneHits);
-                Log.Logger.Information("        TX Tone Valid Range: {TxToneLowerLimit} Hz to {TxToneUpperLimit} Hz", Config.AudioConfig.TxToneLowerLimit, Config.AudioConfig.TxToneUpperLimit);
+                Log.Logger.Information("        TX Tone Threshold:   {TxToneRatio}", Config.Audio.TxToneRatio);
+                Log.Logger.Information("        TX Tone Hits:        {TxToneHits}", Config.Audio.TxToneHits);
+                Log.Logger.Information("        TX Tone Valid Range: {TxToneLowerLimit} Hz to {TxToneUpperLimit} Hz", Config.Audio.TxToneLowerLimit, Config.Audio.TxToneUpperLimit);
             }
             Log.Logger.Information("    Mode: {Mode:l}", Config.Mode.ToString());
             // Print ATG info
@@ -342,8 +342,8 @@ namespace rc2_dvm
             Log.Logger.Information("    Home Talkgroup: {0}", homeTalkgroupIndex >= 0 ? Config.HomeTalkgroup : "None");
             // Print Scan Configuration
             Log.Logger.Information("    Scan Configuration:");
-            Log.Logger.Information("        Talkback: {talkback:l}", Config.ScanConfig.Talkback ? "Enabled" : "Disabled");
-            Log.Logger.Information("        Hangtime: {hangtime} ms", Config.ScanConfig.Hangtime);
+            Log.Logger.Information("        Talkback: {talkback:l}", Config.Scan.Talkback ? "Enabled" : "Disabled");
+            Log.Logger.Information("        Hangtime: {hangtime} ms", Config.Scan.Hangtime);
 
             // Initialize new DVM radio
             dvmRadio = new DVMRadio(
@@ -722,7 +722,7 @@ namespace rc2_dvm
             if (Scanning && scanLandedTg != null)
             {
                 // If talkback is enabled, we want to transmit on the landed channel
-                if (Config.ScanConfig.Talkback)
+                if (Config.Scan.Talkback)
                 {
                     txTalkgroup = scanLandedTg;
                     Log.Logger.Debug("({0:l}) Scan talkback enabled, transmitting on landed talkgroup {tg} ({id})", Config.Name, txTalkgroup.Name, txTalkgroup.DestinationId);

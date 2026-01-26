@@ -102,7 +102,7 @@ namespace rc2_dvm
 
             // Detect tone and send tone codeword if detected
             int tone = 0;
-            if (Config.AudioConfig.TxToneDetection)
+            if (Config.Audio.TxToneDetection)
             {
                 tone = toneDetector.Detect(signal);
             }
@@ -117,13 +117,13 @@ namespace rc2_dvm
                 DiscreteSignal filtered = txAudioFilter.ApplyTo(signal);
 
                 // Apply Gain
-                filtered = filtered * Config.AudioConfig.TxAudioGain;
+                filtered = filtered * Config.Audio.TxAudioGain;
 
                 // Convert back to pcm16 samples
                 short[] filtered16 = Utils.FloatToPcm(filtered.Samples);
 
                 // TX local repeat
-                if (Config.AudioConfig.TxLocalRepeat)
+                if (Config.Audio.TxLocalRepeat)
                 {
                     byte[] pcm = new byte[filtered16.Length * 2];
                     Buffer.BlockCopy(filtered16, 0, pcm, 0, pcm.Length);
@@ -429,7 +429,7 @@ namespace rc2_dvm
                         DiscreteSignal filtered = rxAudioFilter.ApplyTo(signal);
 
                         // Apply Gain
-                        filtered = filtered * Config.AudioConfig.RxAudioGain;
+                        filtered = filtered * Config.Audio.RxAudioGain;
 
                         // Convert back to pcm16 samples
                         short[] filtered16 = Utils.FloatToPcm(filtered.Samples);
