@@ -116,10 +116,7 @@ namespace rc2_dvm
 
                 // SCAN
                 case SoftkeyName.SCAN:
-                    vChannel.ToggleScan();
-                    Status.ScanState = vChannel.Scanning ? ScanState.Scanning : ScanState.NotScanning;
-                    StatusCallback();
-                    return true;
+                    return vChannel.ToggleScan();
                 
                 // Handle unhandled buttons
                 default:

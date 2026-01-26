@@ -543,7 +543,7 @@ namespace rc2_dvm
                 }
             }
 
-            // Update softkeys and states
+            // Update secure softkey & radio state
             if (CurrentTalkgroup.Strapped || Secure)
             {
                 // Update status
@@ -765,7 +765,8 @@ namespace rc2_dvm
                 // Send Grant Demand if enabled
                 if (Config.TxGrantDemands)
                 {
-                    RC2DVM.fneSystem.SendP25TDU(Config.SourceId, txTalkgroup.DestinationId, true);
+                    // Send the grant demand
+                    SendP25TDU(Config.SourceId, txTalkgroup.DestinationId, true, false);
                 }
                 // Update status to transmitting
                 dvmRadio.Status.State = RadioState.Transmitting;
@@ -797,8 +798,8 @@ namespace rc2_dvm
             }
             // Log
             Log.Logger.Information("({0:l}) Stop TX on TG {1} ({2})", Config.Name, txTalkgroup.Name, txTalkgroup.DestinationId);
-            // Send TDU via helper
-            SendP25TDU(Config.SourceId, txTalkgroup.DestinationId, true);
+            // Send TDU via helper (with call termination enabled)
+            SendP25TDU(Config.SourceId, txTalkgroup.DestinationId, false, true);
             // Reset call
             resetCall();
             // Restart the scan hang timer if Scanning
@@ -929,7 +930,7 @@ namespace rc2_dvm
         /// <summary>
         /// Toggle the scan state of the virtual channel
         /// </summary>
-        public void ToggleScan()
+        public bool ToggleScan()
         {
             if (Scanning)
             {
@@ -937,12 +938,26 @@ namespace rc2_dvm
                 Log.Logger.Debug("({0:l}) Scan disabled, stopping hang timer", Config.Name);
                 scanHangTimer.Stop();
                 scanLandedTg = null;
+                // Update radio state
+                dvmRadio.Status.ScanState = ScanState.NotScanning;
+                // Update softkey
+                int keyIdx = dvmRadio.Status.Softkeys.FindIndex(key => key.Name == SoftkeyName.SCAN);
+                dvmRadio.Status.Softkeys[keyIdx].State = SoftkeyState.Off;
             }
             else
             {
                 Scanning = true;
                 Log.Logger.Debug("({0:l}) Scan enabled", Config.Name);
+                // Update radio state
+                dvmRadio.Status.ScanState = ScanState.Scanning;
+                // Update softkey
+                int keyIdx = dvmRadio.Status.Softkeys.FindIndex(key => key.Name == SoftkeyName.SCAN);
+                dvmRadio.Status.Softkeys[keyIdx].State = SoftkeyState.On;
             }
+            // Status update
+            dvmRadio.StatusCallback();
+            // Always return true for now (TODO: Return false for invalid scan configurations)
+            return true;
         }
     }
 }
