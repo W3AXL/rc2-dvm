@@ -766,7 +766,7 @@ namespace rc2_dvm
                 if (Config.TxGrantDemands)
                 {
                     // Send the grant demand
-                    SendP25TDU(Config.SourceId, txTalkgroup.DestinationId, true, false);
+                    P25TDUHelper(Config.SourceId, txTalkgroup.DestinationId, true);
                 }
                 // Update status to transmitting
                 dvmRadio.Status.State = RadioState.Transmitting;
@@ -798,8 +798,8 @@ namespace rc2_dvm
             }
             // Log
             Log.Logger.Information("({0:l}) Stop TX on TG {1} ({2})", Config.Name, txTalkgroup.Name, txTalkgroup.DestinationId);
-            // Send TDU via helper (with call termination enabled)
-            SendP25TDU(Config.SourceId, txTalkgroup.DestinationId, false, true);
+            // Send TDU via helper
+            P25TDUHelper(Config.SourceId, txTalkgroup.DestinationId, false);
             // Reset call
             resetCall();
             // Restart the scan hang timer if Scanning

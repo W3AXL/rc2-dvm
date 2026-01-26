@@ -99,27 +99,26 @@ namespace rc2_dvm
         public static async Task<int> Main(string[] args)
         {
             // Config File Command Line Option
-            Option<FileInfo> configFile = new Option<FileInfo>(
-                name: "--config",
-                description: "YAML configuration file to read");
-            configFile.AddAlias("-c");
-            // Default config path should be the same directory as the exe
             string executingDirectory = System.AppContext.BaseDirectory;
-            configFile.SetDefaultValue(new FileInfo(executingDirectory + "config.yml"));
+            Option<FileInfo> configFile = new Option<FileInfo>("--config")
+            {
+                Description = "YAML configuration file to read",
+                DefaultValueFactory = parseResult => new FileInfo(executingDirectory + "config.yml")
+            };
+            configFile.Aliases.Add("-c");
 
             // Root Command
             RootCommand root = new RootCommand("DVM FNE daemon for RadioConsole2");
-            root.AddOption(configFile);
+            root.Options.Add(configFile);
 
-            // Config file handler (also starts main runtime)
-            root.SetHandler((config) =>
+            root.SetAction(parseResult =>
             {
+                FileInfo config = parseResult.GetValue(configFile);
                 ReadConfig(config);
-            },
-            configFile);
+            });
 
             // Start the handlers
-            return await root.InvokeAsync(args);
+            return await root.Parse(args).InvokeAsync();
         }
 
         public static void ReadConfig(FileInfo configFile)

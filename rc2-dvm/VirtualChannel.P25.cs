@@ -49,19 +49,21 @@ namespace rc2_dvm
         /// <param name="srcId"></param>
         /// <param name="dstId"></param>
         /// <param name="grantDemand"></param>
-        private void SendP25TDU(uint srcId, uint dstId, bool grantDemand = false, bool callTerm = false)
+        private void P25TDUHelper(uint srcId, uint dstId, bool grantDemand = false)
         {
-            // Send optional call termination
-            if (callTerm)
-                RC2DVM.fneSystem.SendDVMCallTermination(srcId, dstId);
-
             // Send the TDU once if grant demand is enabled
             if (grantDemand)
+            {
+                Log.Logger.Debug("({0:l}) Sending P25 TDU grant demand for SrcId {srcId}, DstId {dstId}", Config.Name, srcId, dstId);
                 RC2DVM.fneSystem.SendP25TDU(srcId, dstId, grantDemand);
+            }
             else
             {
                 for (int i = 0; i < 4; i++)
-                    RC2DVM.fneSystem.SendP25TDU(srcId, dstId, grantDemand);
+                {
+                    Log.Logger.Debug("({0:l}) Sending P25 call termination TDU for SrcId {srcId}, DstId {dstId}", Config.Name, srcId, dstId);
+                    RC2DVM.fneSystem.SendP25TDU(srcId, dstId, false);
+                }
             }
 
             p25SeqNo = 0;
