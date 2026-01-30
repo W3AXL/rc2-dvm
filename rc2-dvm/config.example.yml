@@ -6,7 +6,8 @@
 # Logging Configuration
 #
 #   Logging Levels:
-#     1 - Debug
+#     0 - Verbose (Tons of log prints, only use when troubleshooting)
+#     1 - Debug (Still a lot of log prints, but less so than verbose)
 #     2 - Message
 #     3 - Informational
 #     4 - Warning
@@ -23,7 +24,7 @@ log:
     # Full path for the directory to store the activity log files.
     activityFilePath: .
     # Log filename prefix.
-    fileRoot: dvm-rc2
+    fileRoot: rc2-dvm
 
 #
 # Network Configuration

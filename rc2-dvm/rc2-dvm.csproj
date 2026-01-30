@@ -17,6 +17,7 @@
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 	  <DefineConstants>$(ExtraConstants)</DefineConstants>
 	  <PublishTrimmed>True</PublishTrimmed>
+	  <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x86'">
@@ -38,11 +39,11 @@
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
     <PackageReference Include="NWaves" Version="0.9.6" />
-    <PackageReference Include="Serilog" Version="4.3.1-dev-02404" />
+    <PackageReference Include="Serilog" Version="4.3.1-dev-02406" />
     <PackageReference Include="Serilog.Exceptions" Version="8.4.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageReference Include="Serilog.Sinks.File" Version="8.0.0-dev-02318" />
-    <PackageReference Include="SIPSorcery" Version="10.0.4-pre" />
+    <PackageReference Include="SIPSorcery" Version="8.0.7" />
     <PackageReference Include="System.CommandLine" Version="2.0.2" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
