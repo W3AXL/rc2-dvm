@@ -113,7 +113,8 @@ namespace rc2_dvm
 
         protected override void KeyResponse(object sender, KeyResponseEvent e)
         {
-            // Stub
+            // Distribute keys to virtual channels
+            base.KeyResponse(sender, e);
         }
 
         /// <summary>

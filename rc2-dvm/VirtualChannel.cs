@@ -402,6 +402,16 @@ namespace rc2_dvm
         {
             // Start radio
             dvmRadio.Start();
+
+            // Load encryption key for home channel if needed
+            if (CurrentTalkgroup.KeyId != 0 && !loadedKeys.ContainsKey(CurrentTalkgroup.KeyId))
+            {
+                KeyItem key = keyContainer.GetKeyById(CurrentTalkgroup.KeyId);
+                if (key != null)
+                    loadedKeys[key.KeyId] = key;
+                else
+                    RC2DVM.fneSystem.peer.SendMasterKeyRequest(CurrentTalkgroup.AlgId, CurrentTalkgroup.KeyId);
+            }
         }
 
         /// <summary>
@@ -751,6 +761,13 @@ namespace rc2_dvm
                 // Setup Crypto
                 if (txTalkgroup.KeyId != 0 && (Secure || txTalkgroup.Strapped))
                 {
+                    // Ensure key is loaded
+                    if (!loadedKeys.ContainsKey(txTalkgroup.KeyId))
+                    {
+                        Log.Logger.Error("({0:l}) KEYFAIL: Key ID 0x{KeyId:X4} not loaded, cannot TX encrypted", Config.Name, txTalkgroup.KeyId);
+                        RC2DVM.fneSystem.RemoveActiveTalkgroup(txTalkgroup.DestinationId, txTalkgroup.Timeslot);
+                        return false;
+                    }
                     crypto.SetKey(txTalkgroup.KeyId, txTalkgroup.AlgId, loadedKeys[txTalkgroup.KeyId].GetKey());
                     Log.Logger.Information("({0:l}) Start ENC TX on TG {1} ({2})", Config.Name, txTalkgroup.Name, txTalkgroup.DestinationId);
                 }
