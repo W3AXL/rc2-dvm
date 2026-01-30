@@ -81,7 +81,7 @@ namespace rc2_dvm
             // Ensure samples are right length
             if (pcm16.Length != FneSystemBase.MBE_SAMPLES_LENGTH)
             {
-                throw new ArgumentException("Input samples not proper length for MBE encoding!");
+                throw new ArgumentException($"Input samples not proper length for MBE encoding! Got {pcm16.Length} but need {FneSystemBase.MBE_SAMPLES_LENGTH}");
             }
 
             if (p25N > 17)

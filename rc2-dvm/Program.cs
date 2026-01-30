@@ -168,13 +168,17 @@ namespace rc2_dvm
 
             // Setup Logging
             LoggerConfiguration logConfig = new LoggerConfiguration();
-            logConfig.MinimumLevel.Debug();
+            logConfig.MinimumLevel.Verbose();
             const string logTemplate = "{Level:u1}: {Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Message}{NewLine}{Exception}";
 
             // File Logging Config
             LogEventLevel fileLevel = LogEventLevel.Information;
             switch (config.Log.FileLevel)
             {
+                case 0:
+                    fileLevel = LogEventLevel.Verbose;
+                    FneLogLevel = FneLogLevel.DEBUG;
+                    break;
                 case 1:
                     fileLevel = LogEventLevel.Debug;
                     FneLogLevel = FneLogLevel.DEBUG;
@@ -208,6 +212,10 @@ namespace rc2_dvm
             LogEventLevel dispLevel = LogEventLevel.Information;
             switch (config.Log.DisplayLevel)
             {
+                case 0:
+                    dispLevel = LogEventLevel.Verbose;
+                    FneLogLevel = FneLogLevel.DEBUG;
+                    break;
                 case 1:
                     dispLevel = LogEventLevel.Debug;
                     FneLogLevel = FneLogLevel.DEBUG;
