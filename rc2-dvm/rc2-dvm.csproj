@@ -43,7 +43,7 @@
     <PackageReference Include="Serilog.Exceptions" Version="8.4.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageReference Include="Serilog.Sinks.File" Version="8.0.0-dev-02318" />
-    <PackageReference Include="SIPSorcery" Version="8.0.7" />
+    <PackageReference Include="SIPSorcery" Version="8.0.12" />
     <PackageReference Include="System.CommandLine" Version="2.0.2" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>

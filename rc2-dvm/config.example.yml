@@ -55,6 +55,11 @@ network:
     # Whether additional debug is printed to the log
     debug: false
 
+    # Optional allowed networks, helps with filtering from consoles running on PCs with lots of interfaces
+    allowedNetworks:
+      - 192.168.0.0/24
+      - 10.10.0.0/16
+
 #
 # Global Audio Config
 #

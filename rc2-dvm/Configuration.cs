@@ -135,6 +135,10 @@ namespace rc2_dvm
         /// Whether or not this talkgroup is included in the scanlist
         /// </summary>
         public bool Scan = true;
+        /// <summary>
+        /// Whether the talkgroup is nuisance deleted (should not be configured in the yml, internal use only)
+        /// </summary>
+        public bool NuisanceDeleted = false;
     }
 
     /// <summary>
@@ -253,6 +257,10 @@ namespace rc2_dvm
         /// Whether to enable additional debug messages
         /// </summary>
         public bool Debug = false;
+        /// <summary>
+        /// List of allowed subnets/networks for incoming WebRTC connections
+        /// </summary>
+        public List<IPNetwork> AllowedNetworks = new();
     }
 
     public class EncryptionConfigObject

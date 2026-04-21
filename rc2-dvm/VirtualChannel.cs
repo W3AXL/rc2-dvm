@@ -26,6 +26,7 @@ using NWaves.Audio;
 using NWaves.Operations;
 using Org.BouncyCastle.Asn1;
 using NAudio.Midi;
+using System.Linq.Expressions;
 
 namespace rc2_dvm
 {
@@ -95,6 +96,11 @@ namespace rc2_dvm
         public bool Secure = false;
 
         /// <summary>
+        /// State variable to track if SetupCryptoConfig() has been called for the current call
+        /// </summary>
+        private bool cryptoConfigured = false;
+
+        /// <summary>
         /// Index of the currently selected talkgroup for this channel
         /// </summary>
         private int currentTgIdx = 0;
@@ -122,6 +128,22 @@ namespace rc2_dvm
             get
             {
                 return Config.Talkgroups[currentTgIdx];
+            }
+        }
+
+        /// <summary>
+        /// Whether the virtual channel is currently connected to the console client
+        /// </summary>
+        public bool Connected
+        {
+            get
+            {
+                return (
+                    dvmRadio.Status.State == RadioState.Idle ||
+                    dvmRadio.Status.State == RadioState.Transmitting ||
+                    dvmRadio.Status.State == RadioState.Receiving ||
+                    dvmRadio.Status.State == RadioState.Encrypted
+                    );
             }
         }
 
@@ -349,6 +371,7 @@ namespace rc2_dvm
             dvmRadio = new DVMRadio(
                 Config.Name, Config.RxOnly,
                 Config.ListenAddress, Config.ListenPort,
+                RC2DVM.Configuration.Network.AllowedNetworks,
                 Config.Talkgroups, this,
                 HandleTxAudio,
                 waveFormat.SampleRate
@@ -454,7 +477,7 @@ namespace rc2_dvm
                 // Log
                 Log.Logger.Debug("({0:l}) Selected TG {1:l} ({2})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
                 // Return channel setup success
-                return SetupChannel();
+                return SetupChannelCrypto();
             }
         }
 
@@ -483,7 +506,7 @@ namespace rc2_dvm
                 // Log
                 Log.Logger.Debug("({0:l}) Selected TG {1:l} ({2})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
                 // Return channel setup success
-                return SetupChannel();
+                return SetupChannelCrypto();
             }
             else { return false; }
         }
@@ -517,44 +540,64 @@ namespace rc2_dvm
             // Log
             Log.Logger.Debug("({0:l}) Selected TG {1:l} ({2})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
             // Return setup success
-            return SetupChannel();
+            return SetupChannelCrypto();
         }
 
         /// <summary>
         /// Callback when a new channel is selected (handles configuration of encryption, etc)
         /// </summary>
-        public bool SetupChannel()
+        public bool SetupChannelCrypto()
         {
-            // Setup encryption if configured
-            if (CurrentTalkgroup.AlgId != P25Defines.P25_ALGO_UNENCRYPT)
+            // Return true if we already did it
+            if (cryptoConfigured == true)
             {
-                // Ensure key ID is set
-                if (CurrentTalkgroup.KeyId == 0)
+                return true;
+            }
+
+            // Determine which TG we should be configuring for (scan TG or selected TG)
+            TalkgroupConfigObject tg = CurrentTalkgroup;
+            if (scanLandedTg != null)
+            {
+                tg = scanLandedTg;
+                Log.Logger.Debug("({0:l}) configuring crypto for scan landed TG {TG:l} ({tgid})", Config.Name, tg.Name, tg.DestinationId);
+            }
+            else
+            {
+                Log.Logger.Debug("({0:l}) configuring crypto for selected TG {TG:l} ({tgid})", Config.Name, tg.Name, tg.DestinationId);
+            }
+
+            // Setup crypto if required
+            if (tg.AlgId != P25Defines.P25_ALGO_UNENCRYPT)
+            {
+                // Check for proper config
+                if (tg.KeyId == 0)
                 {
-                    Log.Logger.Error("({0:l}) KEYFAIL: {TG} ({TGID}) is configured for encryption but has Key ID 0", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
+                    Log.Logger.Error("({0:l}) KEYFAIL: TG {TG:l} ({TGID}) is configured for encryption but has Key ID 0", Config.Name, tg.Name, tg.DestinationId);
                     return false;
                 }
-                // Load the key if it's not loaded already
-                if (!loadedKeys.ContainsKey(CurrentTalkgroup.KeyId))
+                // Log Print
+                Log.Logger.Debug("({0:l}) Loading key for TG {tg:l} ({tgid}): {alg:l} KID 0x{kid:X4}", Config.Name, tg.Name, tg.DestinationId, Enum.GetName((Algorithm)tg.AlgId), tg.KeyId);
+                // Load key if not already loaded
+                if (!loadedKeys.ContainsKey(tg.KeyId))
                 {
-                    // Try to get the key from the local file
-                    KeyItem key = keyContainer.GetKeyById(CurrentTalkgroup.KeyId);
+                    KeyItem key = keyContainer.GetKeyById(tg.KeyId);
                     if (key != null)
                     {
                         loadedKeys[key.KeyId] = key;
-                        Log.Logger.Information("({0:l}) Loaded Key ID 0x{KeyId:X4} ({Algo:l}) from keyfile into local keystore", Config.Name, key.KeyId, Enum.GetName(typeof(Algorithm), key.KeyFormat));
+                        Log.Logger.Information("({0:l}) Loaded KID 0x{KeyId:X4} ({Algo:l}) from keyfile into local keystore", Config.Name, key.KeyId, Enum.GetName(typeof(Algorithm), key.KeyFormat));
                     }
-                    // Request from FNE as a fallback
+                    // If we couldn't find it locally, request it from the master and return false (will ignore this call)
                     else
                     {
-                        Log.Logger.Information("({0:l}) Key ID 0x{keyId:X4} not found in local keyfile, requesting from FNE", Config.Name, CurrentTalkgroup.KeyId);
-                        RC2DVM.fneSystem.peer.SendMasterKeyRequest(CurrentTalkgroup.AlgId, CurrentTalkgroup.KeyId);
+                        Log.Logger.Warning("({0:l}) KID 0x{keyId:X4} not found in local keyfile, requesting from FNE", Config.Name, tg.KeyId);
+                        RC2DVM.fneSystem.peer.SendMasterKeyRequest(tg.AlgId, tg.KeyId);
+                        return false;
                     }
                 }
-            }
+            }            
 
             // Update secure softkey & radio state
-            if (CurrentTalkgroup.Strapped || Secure)
+            if (tg.Strapped || Secure)
             {
                 // Update status
                 dvmRadio.Status.Secure = true;
@@ -575,6 +618,7 @@ namespace rc2_dvm
             dvmRadio.StatusCallback();
 
             // Return true if nothing failed
+            cryptoConfigured = true;
             return true;
         }
 
@@ -626,18 +670,30 @@ namespace rc2_dvm
         {
             // Stop source ID callback
             sourceIdTimer.Stop();
+            // Update channel name based on whether it's a landed scan channel or not
+            if (scanLandedTg != null)
+                dvmRadio.Status.ChannelName = scanLandedTg.Name;
+            else
+                dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
             // Stop rx data timeout timer
             rxDataTimer.Stop();
             // Reset P25 counter
             p25N = 0;
-            // Update status
-            dvmRadio.Status.State = RadioState.Idle;
+            // Reset crypto configuration flag
+            cryptoConfigured = false;
+            // Update status to idle if connected
+            if (Connected)
+                dvmRadio.Status.State = RadioState.Idle;
+            // Reset flags
             ignoreCall = false;
+            callInProgress = false;
+            // Reset encryption
             callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
             FneUtils.Memset(callMi, 0x00, P25Defines.P25_MI_LENGTH);
-            callInProgress = false;
             // Send status
             dvmRadio.StatusCallback();
+            // Log
+            Log.Logger.Debug("({0:l}) reset call states", Config.Name);
         }
 
         /// <summary>
@@ -716,6 +772,28 @@ namespace rc2_dvm
             else
             {
                 return Config.Talkgroups?.Any(tg => tg.DestinationId == tgid && tg.Scan == true) ?? false;
+            }
+        }
+
+        /// <summary>
+        /// Returns whether the given talkgroup is currently nuisance deleted
+        /// </summary>
+        /// <param name="mode"></param>
+        /// <param name="tgid"></param>
+        /// <param name="slot"></param>
+        /// <returns></returns>
+
+        public bool IsTgNuisanceDeleted(VocoderMode mode, uint tgid, uint slot = 1)
+        {
+            if (mode != Config.Mode) { return false; }
+
+            if (Config.Mode == VocoderMode.DMR)
+            {
+                return Config.Talkgroups?.Any(tg => tg.DestinationId == tgid && tg.Timeslot == slot && tg.NuisanceDeleted == true) ?? false;
+            }
+            else
+            {
+                return Config.Talkgroups?.Any(tg => tg.DestinationId == tgid && tg.NuisanceDeleted == true) ?? false;
             }
         }
 
@@ -886,7 +964,7 @@ namespace rc2_dvm
 
         private void LoadSounds()
         {
-            Log.Logger.Debug("Loading sounds for virtual channel");
+            Log.Logger.Debug("({0:l}) Loading sounds for virtual channel", Config.Name);
 
             // Load ATG tone
             WaveFile atgTone = new WaveFile(rc2_dvm.Properties.Resources.sndAtgTone);
@@ -925,7 +1003,7 @@ namespace rc2_dvm
             // Calculate the number of MBE frames to skip
             int skipFrames = toneAtg.Length / LDU_SAMPLES_LENGTH;
             // Debug print
-            Log.Logger.Debug("Sending ATG tone to Radio ({0} samples / {1} LDU frames)", toneAtg.Length, skipFrames);
+            Log.Logger.Debug("({0:l}) Sending ATG tone to Radio ({0} samples / {1} LDU frames)", Config.Name, toneAtg.Length, skipFrames);
             // Send audio
             dvmRadio.RxSendPCM16Samples(toneAtg, (uint)waveFormat.SampleRate);
             // Return
@@ -945,6 +1023,18 @@ namespace rc2_dvm
         }
 
         /// <summary>
+        /// Reset all nuisance-deleted talkgroups in the channel
+        /// </summary>
+        private void resetNuisanceDeletions()
+        {
+            Log.Logger.Information("({0:l}) resetting nuisance deletions", Config.Name);
+            Config.Talkgroups.ForEach(tg =>
+            {
+                tg.NuisanceDeleted = false;
+            });
+        }
+
+        /// <summary>
         /// Toggle the scan state of the virtual channel
         /// </summary>
         public bool ToggleScan()
@@ -955,8 +1045,14 @@ namespace rc2_dvm
                 Log.Logger.Debug("({0:l}) Scan disabled, stopping hang timer", Config.Name);
                 scanHangTimer.Stop();
                 scanLandedTg = null;
+                // Reset nuisance
+                resetNuisanceDeletions();
                 // Update radio state
                 dvmRadio.Status.ScanState = ScanState.NotScanning;
+                // Stop the ID callback
+                sourceIdTimer.Stop();
+                // Revert to the currently selected TG name
+                dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
                 // Update softkey
                 int keyIdx = dvmRadio.Status.Softkeys.FindIndex(key => key.Name == SoftkeyName.SCAN);
                 dvmRadio.Status.Softkeys[keyIdx].State = SoftkeyState.Off;
@@ -974,6 +1070,43 @@ namespace rc2_dvm
             // Status update
             dvmRadio.StatusCallback();
             // Always return true for now (TODO: Return false for invalid scan configurations)
+            return true;
+        }
+
+        /// <summary>
+        /// Nuisance delete button handler
+        /// </summary>
+        /// <returns></returns>
+        public bool NuisanceDelete()
+        {
+            // Do nothing if we're not scanning
+            if (!Scanning)
+            {
+                Log.Logger.Warning("({0:l}) Channel not scanning, cannot nuisance delete", Config.Name);
+                return false;
+            }
+            // Do nothing if we're not landed on a scanned channel
+            if (scanLandedTg == null)
+            {
+                Log.Logger.Warning("({0:l}) Scan not landed, cannot nuisance delete", Config.Name);
+                return false;
+            }
+            // Find the scanned talkgroup in our config list
+            int tgIdx = Config.Talkgroups.FindIndex(tg => tg.DestinationId == scanLandedTg.DestinationId && tg.Timeslot == scanLandedTg.Timeslot);
+            // Sanity check
+            if (tgIdx == -1)
+            {
+                Log.Logger.Error("({0:l}) Failed to lookup TGID {tgid} TS {ts} in talkgroup list!", Config.Name, scanLandedTg.DestinationId, scanLandedTg.Timeslot);
+                return false;
+            }
+            // Nuisance delete
+            Config.Talkgroups[tgIdx].NuisanceDeleted = true;
+            // Revert scan status vars
+            scanHangTimer.Stop();
+            scanLandedTg = null;
+            // Reset all call parameters
+            resetCall();
+            // Return true if everything was okay
             return true;
         }
     }
