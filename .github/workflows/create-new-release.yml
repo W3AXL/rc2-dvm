@@ -10,22 +10,26 @@ jobs:
     runs-on: windows-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
           fetch-depth: 0
       
     - name: Create Release
       id: create_release
+      shell: bash
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        if git show-ref --tags --verify --quiet "refs/tags/${{ github.ref_name }}"; then
-          echo "Release tag ${{ github.ref_name }} already exists, skipping creation..."
+        if gh release view ${{ github.ref_name }} > /dev/null 2>&1; then
+          echo "Release ${{ github.ref_name }} already exists, skipping..."
         else
           gh release create ${{ github.ref_name }}
         fi
 
   build-release:
+    # Ensure this doesn't run in parallel with the above
+    needs:
+      create-release
     uses: ./.github/workflows/build.yml
     with:
       release: true
