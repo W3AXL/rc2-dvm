@@ -158,6 +158,21 @@ namespace rc2_dvm
         private int homeTalkgroupIndex = -1;
 
         /// <summary>
+        /// A struct representing a unique call we can check against for processing
+        /// </summary>
+        private struct uniqueCall
+        {
+            public uint PeerID;
+            public uint SrcID;
+            public uint DstID;
+        }
+
+        /// <summary>
+        /// A list of calls we're currently ignoring
+        /// </summary>
+        private List<uniqueCall> ignoredCalls = new List<uniqueCall>();
+
+        /// <summary>
         /// Creates a new instance of a virtual channel
         /// </summary>
         /// <param name="config"></param>
@@ -685,7 +700,6 @@ namespace rc2_dvm
             if (Connected)
                 dvmRadio.Status.State = RadioState.Idle;
             // Reset flags
-            ignoreCall = false;
             callInProgress = false;
             // Reset encryption
             callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
@@ -1108,6 +1122,40 @@ namespace rc2_dvm
             resetCall();
             // Return true if everything was okay
             return true;
+        }
+
+        /// <summary>
+        /// Returns true if a call with the given peer/src/dst combo is present in our ignored calls list
+        /// </summary>
+        /// <param name="e">P25DataReceviedEvent for the given call</param>
+        /// <returns></returns>
+        private bool ignoringCall(P25DataReceivedEvent e)
+        {
+            return ignoredCalls.Any(call => call.PeerID == e.PeerId && call.SrcID == e.SrcId && call.DstID == e.DstId);
+        }
+
+        /// <summary>
+        /// Add a call with the given peer/src/dst to our ignored calls list
+        /// </summary>
+        /// <param name="e">P25DataReceviedEvent for the given call</param>
+        private void ignoreCall(P25DataReceivedEvent e)
+        {
+            if (!ignoringCall(e))
+            {
+                ignoredCalls.Add(new uniqueCall { PeerID = e.PeerId, SrcID = e.SrcId, DstID = e.DstId});
+            }
+        }
+
+        /// <summary>
+        /// Remove a call with the given peer/src/dst from our ignored calls list
+        /// </summary>
+        /// <param name="e"></param>
+        private void clearIgnored(P25DataReceivedEvent e)
+        {
+            if (ignoringCall(e))
+            {
+                ignoredCalls.Remove(new uniqueCall { PeerID = e.PeerId, SrcID = e.SrcId, DstID = e.DstId });
+            }
         }
     }
 }
