@@ -464,7 +464,7 @@ namespace rc2_dvm
                 data[i - 24] = e.Data[i];
 
             // Check if we're already ignoring this call and return
-            if (ignoringCall(e))
+            if (ignoringStream(e.StreamId))
             {
                 return;
             }
@@ -474,19 +474,19 @@ namespace rc2_dvm
             if (!HasTalkgroupConfigured(VocoderMode.P25, e.DstId))
             {
                 Log.Logger.Debug("({0:l} Ignoring data from P25 TGID {1}, channel does not have TGID configured", Config.Name, e.DstId);
-                ignoreCall(e);
+                ignoreStream(e.StreamId);
             }
             // Ignore if we're not connected
             else if (!Connected)
             {
                 Log.Logger.Debug("({0:l}) Ignoring data from P25 TGID {1}, channel is not connected", Config.Name, e.DstId);
-                ignoreCall(e);
+                ignoreStream(e.StreamId);
             }
             // Ignore if we're transmitting
             else if (IsTransmitting())
             {
                 Log.Logger.Debug("({0:l}) Ignoring data from P25 TGID {1}, channel is currently transmitting", Config.Name, e.DstId);
-                ignoreCall(e);
+                ignoreStream(e.StreamId);
             }
             // See if we have the TG selected
             else if (IsTalkgroupSelected(VocoderMode.P25, e.DstId))
@@ -505,7 +505,7 @@ namespace rc2_dvm
                 if (scanHangTimer.Enabled && (scanLandedTg?.DestinationId != e.DstId))
                 {
                     Log.Logger.Debug("({0:l}) Ignoring data from P25 TGID {tgid}, scan hang timer running for another TG ({landedId})", Config.Name, e.DstId, scanLandedTg.DestinationId);
-                    ignoreCall(e);
+                    ignoreStream(e.StreamId);
                 }
                 // If the talkgroup is in the scanlist, (re)start the scan hang timer and indicate we've landed on a channel
                 else
@@ -516,19 +516,24 @@ namespace rc2_dvm
                     if (tg == null)
                     {
                         Log.Logger.Warning("({0:l}) Failed to lookup talkgroup for TGID {tgid}", Config.Name, e.DstId);
-                        ignoreCall(e);
+                        ignoreStream(e.StreamId);
                     }
                     else
                     {
-                        // Start the scan hang timer and land this channel
+                        // (re)start the scan hang timer
                         scanHangTimer.Stop();
                         scanHangTimer.Start();
-                        scanLandedTg = tg;
+                        // Update landed TGID and reset crypto if it's changed
+                        if (scanLandedTg != tg)
+                        {
+                            scanLandedTg = tg;
+                            cryptoConfigured = false;
+                        }
                         // Setup Crypto if needed and ignore the call if it fails
                         if (!SetupChannelCrypto())
                         {
                             Log.Logger.Warning("({0:l}) Failed to setup crypto for scan landed TG {tg:l} ({tgid}), ignoring call", Config.Name, scanLandedTg.Name, scanLandedTg.DestinationId);
-                            ignoreCall(e);
+                            ignoreStream(e.StreamId);
                         }
                         else
                         {
@@ -544,11 +549,11 @@ namespace rc2_dvm
             else
             {
                 Log.Logger.Debug("({0:l}) Ignoring data from P25 TGID {1}, not scanning and not configured for this TG", Config.Name, e.DstId);
-                ignoreCall(e);
+                ignoreStream(e.StreamId);
             }
 
             // if this is an LDU1 and we're not ignoring the call, see if this is the first LDU that contains the MI and other encryption info
-            if (e.DUID == P25DUID.LDU1 && !ignoringCall(e))
+            if (e.DUID == P25DUID.LDU1 && !ignoringStream(e.StreamId))
             {
                 byte frameType = e.Data[180];
                 
@@ -573,23 +578,23 @@ namespace rc2_dvm
                             if (scanLandedTg != null && callKeyId != scanLandedTg.KeyId)
                             {
                                 Log.Logger.Warning("({0:l}) P25D: Ignoring scanning traffic for non-matching key ID 0x{keyID:X4} != 0x{expKeyID:X4} (AlgId 0x{algid:X2})", Config.Name, callKeyId, scanLandedTg.KeyId, callAlgoId);
-                                ignoreCall(e);
+                                ignoreStream(e.StreamId);
                             }
                             // Next, check selected talgroup key
                             else if (scanLandedTg == null && callKeyId != CurrentTalkgroup.KeyId)
                             {
                                 Log.Logger.Warning("({0:l}) P25D: Ignoring traffic for non-matching key ID 0x{keyID:X4} != 0x{expKeyID:X4} (AlgId 0x{algid:X2})", Config.Name, callKeyId, CurrentTalkgroup.KeyId, callAlgoId);
-                                ignoreCall(e);
+                                ignoreStream(e.StreamId);
                             } 
                         }
                         // Ignore the call if we don't have the key loaded
                         else if (!loadedKeys.ContainsKey(callKeyId))
                         {
                             Log.Logger.Warning("({0:l}) P25D: Ignoring traffic for missing key ID 0x{keyID:X4} (AlgId 0x{algid:X2})", Config.Name, callKeyId, callAlgoId);
-                            ignoreCall(e);
+                            ignoreStream(e.StreamId);
                         }
                         // Assuming all checks passed, set up the crypto engine
-                        if (!ignoringCall(e))
+                        if (!ignoringStream(e.StreamId))
                         {
                             // Set Key
                             crypto.SetKey(callKeyId, callAlgoId, loadedKeys[callKeyId].GetKey());
@@ -603,11 +608,11 @@ namespace rc2_dvm
             }
 
             // Check to see if this is a new call stream and initialize the call if so
-            if (!ignoringCall(e) && e.StreamId != status[FneSystemBase.P25_FIXED_SLOT].RxStreamId && ((e.DUID != P25DUID.TDU) && (e.DUID != P25DUID.TDULC)))
+            if (!ignoringStream(e.StreamId) && e.StreamId != status[FneSystemBase.P25_FIXED_SLOT].RxStreamId && ((e.DUID != P25DUID.TDU) && (e.DUID != P25DUID.TDULC)))
             {
                 // Debug, dump the LDU
-                Log.Logger.Debug("({0:l}) New call stream, dumping data:", Config.Name);
-                Log.Logger.Debug(FneUtils.HexDump(e.Data));
+                //Log.Logger.Debug("({0:l}) New call stream, dumping data:", Config.Name);
+                //Log.Logger.Debug(FneUtils.HexDump(e.Data));
 
                 callInProgress = true;
                 status[FneSystemBase.P25_FIXED_SLOT].RxStart = pktTime;
@@ -660,7 +665,7 @@ namespace rc2_dvm
             if (e.DUID == P25DUID.TDU || e.DUID == P25DUID.TDULC)
             {
                 // Log if not ignoring
-                if (!ignoringCall(e))
+                if (!ignoringStream(e.StreamId))
                 {
                     TimeSpan callDuration = pktTime - status[FneSystemBase.P25_FIXED_SLOT].RxStart;
                     Log.Logger.Information("({0:l}) P25D: Traffic *CALL END       * PEER {1} SRC_ID {2} TGID {3} DUR {4} [STREAM ID {5}]", Config.Name, e.PeerId, e.SrcId, e.DstId, callDuration, e.StreamId);
@@ -670,14 +675,14 @@ namespace rc2_dvm
                 // If we are ignoring the call, and it's over, we can remove it from our ignored calls list
                 else
                 {
-                    clearIgnored(e);
+                    clearIgnored(e.StreamId);
                 }
                 // Return
                 return;
             }
 
             // At this point, if we're supposed to be ignoring the call, we can return
-            if (ignoringCall(e))
+            if (ignoringStream(e.StreamId))
                 return;
 
             // Grab the algo ID from LDU2

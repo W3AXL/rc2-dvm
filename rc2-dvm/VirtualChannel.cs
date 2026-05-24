@@ -158,19 +158,9 @@ namespace rc2_dvm
         private int homeTalkgroupIndex = -1;
 
         /// <summary>
-        /// A struct representing a unique call we can check against for processing
-        /// </summary>
-        private struct uniqueCall
-        {
-            public uint PeerID;
-            public uint SrcID;
-            public uint DstID;
-        }
-
-        /// <summary>
         /// A list of calls we're currently ignoring
         /// </summary>
-        private List<uniqueCall> ignoredCalls = new List<uniqueCall>();
+        private List<uint> ignoredStreams = new List<uint>();
 
         /// <summary>
         /// Creates a new instance of a virtual channel
@@ -492,6 +482,7 @@ namespace rc2_dvm
                 // Log
                 Log.Logger.Debug("({0:l}) Selected TG {1:l} ({2})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
                 // Return channel setup success
+                cryptoConfigured = false;
                 return SetupChannelCrypto();
             }
         }
@@ -521,6 +512,7 @@ namespace rc2_dvm
                 // Log
                 Log.Logger.Debug("({0:l}) Selected TG {1:l} ({2})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
                 // Return channel setup success
+                cryptoConfigured = false;
                 return SetupChannelCrypto();
             }
             else { return false; }
@@ -555,6 +547,7 @@ namespace rc2_dvm
             // Log
             Log.Logger.Debug("({0:l}) Selected TG {1:l} ({2})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
             // Return setup success
+            cryptoConfigured = false;
             return SetupChannelCrypto();
         }
 
@@ -568,6 +561,12 @@ namespace rc2_dvm
             {
                 return true;
             }
+
+            // By default, our channel state will be unencrypted until we properly configure everything
+            dvmRadio.Status.Secure = false;
+            // Update softkey
+            int softkeyIdx = dvmRadio.Status.Softkeys.FindIndex(key => key.Name == SoftkeyName.SEC);
+            dvmRadio.Status.Softkeys[softkeyIdx].State = SoftkeyState.Off;
 
             // Determine which TG we should be configuring for (scan TG or selected TG)
             TalkgroupConfigObject tg = CurrentTalkgroup;
@@ -611,26 +610,14 @@ namespace rc2_dvm
                 }
             }            
 
-            // Update secure softkey & radio state
+            // If everything above succeeded and we're strapped or selected secure, update the softkey & state
             if (tg.Strapped || Secure)
             {
                 // Update status
                 dvmRadio.Status.Secure = true;
                 // Update softkey
-                int keyIdx = dvmRadio.Status.Softkeys.FindIndex(key => key.Name == SoftkeyName.SEC);
-                dvmRadio.Status.Softkeys[keyIdx].State = SoftkeyState.On;
+                dvmRadio.Status.Softkeys[softkeyIdx].State = SoftkeyState.On;
             }
-            else
-            {
-                // Update status
-                dvmRadio.Status.Secure = false;
-                // Update softkey
-                int keyIdx = dvmRadio.Status.Softkeys.FindIndex(key => key.Name == SoftkeyName.SEC);
-                dvmRadio.Status.Softkeys[keyIdx].State = SoftkeyState.Off;
-            }
-
-            // Send status update
-            dvmRadio.StatusCallback();
 
             // Return true if nothing failed
             cryptoConfigured = true;
@@ -694,8 +681,6 @@ namespace rc2_dvm
             rxDataTimer.Stop();
             // Reset P25 counter
             p25N = 0;
-            // Reset crypto configuration flag
-            cryptoConfigured = false;
             // Update status to idle if connected
             if (Connected)
                 dvmRadio.Status.State = RadioState.Idle;
@@ -719,11 +704,14 @@ namespace rc2_dvm
             Log.Logger.Debug("({0:l}) Scan hang timer expiration, reverting to seleted talkgroup", Config.Name);
             // Stop the hang timer
             scanHangTimer.Stop();
+            // Reset the landed tg
+            scanLandedTg = null;
+            // Reset the crypto indicator appropriately
+            cryptoConfigured = false;
+            SetupChannelCrypto();
             // Reset the channel text & update status
             dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
             dvmRadio.StatusCallback();
-            // Reset the landed tg
-            scanLandedTg = null;
         }
 
         /// <summary>
@@ -1125,24 +1113,24 @@ namespace rc2_dvm
         }
 
         /// <summary>
-        /// Returns true if a call with the given peer/src/dst combo is present in our ignored calls list
+        /// Returns true if we're ignoring the given streamId
         /// </summary>
-        /// <param name="e">P25DataReceviedEvent for the given call</param>
+        /// <param name="streamId">stream ID for the given call</param>
         /// <returns></returns>
-        private bool ignoringCall(P25DataReceivedEvent e)
+        private bool ignoringStream(uint streamId)
         {
-            return ignoredCalls.Any(call => call.PeerID == e.PeerId && call.SrcID == e.SrcId && call.DstID == e.DstId);
+            return ignoredStreams.Contains(streamId);
         }
 
         /// <summary>
-        /// Add a call with the given peer/src/dst to our ignored calls list
+        /// Add a call with the given streamId to our list of ignored streams
         /// </summary>
         /// <param name="e">P25DataReceviedEvent for the given call</param>
-        private void ignoreCall(P25DataReceivedEvent e)
+        private void ignoreStream(uint streamId)
         {
-            if (!ignoringCall(e))
+            if (!ignoringStream(streamId))
             {
-                ignoredCalls.Add(new uniqueCall { PeerID = e.PeerId, SrcID = e.SrcId, DstID = e.DstId});
+                ignoredStreams.Add(streamId);
             }
         }
 
@@ -1150,11 +1138,11 @@ namespace rc2_dvm
         /// Remove a call with the given peer/src/dst from our ignored calls list
         /// </summary>
         /// <param name="e"></param>
-        private void clearIgnored(P25DataReceivedEvent e)
+        private void clearIgnored(uint streamId)
         {
-            if (ignoringCall(e))
+            if (ignoringStream(streamId))
             {
-                ignoredCalls.Remove(new uniqueCall { PeerID = e.PeerId, SrcID = e.SrcId, DstID = e.DstId });
+                ignoredStreams.Remove(streamId);
             }
         }
     }
