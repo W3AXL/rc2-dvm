@@ -19,6 +19,7 @@ namespace rc2_dvm
             SoftkeyName.HOME,
             SoftkeyName.SCAN,
             SoftkeyName.SEC,
+            SoftkeyName.DEL
         };
 
         // Talkgroup list
@@ -39,8 +40,9 @@ namespace rc2_dvm
         public DVMRadio(
             string name, bool rxOnly,
             IPAddress listenAddress, int listenPort,
+            List<IPNetwork> allowedNetworks,
             List<TalkgroupConfigObject> talkgroups, VirtualChannel vChannel, 
-            Action<short[]> txAudioCallback, int txAudioSampleRate) : base(name, "", rxOnly, listenAddress, listenPort, DVMSoftkeys, null, null, txAudioCallback, txAudioSampleRate)
+            Action<short[]> txAudioCallback, int txAudioSampleRate) : base(name, "", rxOnly, listenAddress, listenPort, allowedNetworks, DVMSoftkeys, null, null, txAudioCallback, txAudioSampleRate)
         {
             this.talkgroups = talkgroups;
             this.vChannel = vChannel;
@@ -98,17 +100,29 @@ namespace rc2_dvm
                         Log.Logger.Warning("Talkgroup security is strapped secure, cannot toggle secure mode");
                         return false;
                     }
-                    // If current talkgroup is not set up for encryption, bonk
+                    // If current talkgroup is not set up for encryption
                     if (vChannel.CurrentTalkgroup.KeyId == 0 || vChannel.CurrentTalkgroup.AlgId == P25Defines.P25_ALGO_UNENCRYPT)
                     {
-                        Log.Logger.Warning("Talkgroup is not configured for secure operation, cannot toggle secure mode");
-                        return false;
+                        // If we have secure enabled, disable it
+                        if (vChannel.Secure)
+                        {
+                            vChannel.Secure = false;
+                            Log.Logger.Information("Disabling secure mode for radio {name:l}, channel not configured for encryption", vChannel.Config.Name);
+                        }
+                        else
+                        {
+                            Log.Logger.Warning("Talkgroup is not configured for secure operation, cannot toggle secure mode");
+                            return false;
+                        } 
                     }
-                    // Toggle secure status
-                    vChannel.Secure = !vChannel.Secure;
-                    Log.Logger.Information("Toggling secure mode for radio {name:l}: {state:l}", vChannel.Config.Name, (vChannel.Secure ? "ON" : "OFF"));
+                    else
+                    {
+                        // Toggle secure status
+                        vChannel.Secure = !vChannel.Secure;
+                        Log.Logger.Information("Toggling secure mode for radio {name:l}: {state:l}", vChannel.Config.Name, (vChannel.Secure ? "ON" : "OFF"));
+                    }
                     // Return channel setup success/failure
-                    return vChannel.SetupChannel();
+                    return vChannel.SetupChannelCrypto();
 
                 // HOME
                 case SoftkeyName.HOME:
@@ -117,6 +131,10 @@ namespace rc2_dvm
                 // SCAN
                 case SoftkeyName.SCAN:
                     return vChannel.ToggleScan();
+
+                // DEL (Nuisance Delete)
+                case SoftkeyName.DEL:
+                    return vChannel.NuisanceDelete();
                 
                 // Handle unhandled buttons
                 default:
