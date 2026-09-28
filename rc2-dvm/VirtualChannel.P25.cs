@@ -17,6 +17,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using RadioConsole.Protocol;
 
 namespace rc2_dvm
 {
@@ -435,7 +436,7 @@ namespace rc2_dvm
                         short[] filtered16 = Utils.FloatToPcm(filtered.Samples);
 
                         // Send to WebRTC
-                        dvmRadio.RxSendPCM16Samples(filtered16, (uint)waveFormat.SampleRate);
+                        dvmRadio.SendRxPCM16Samples(filtered16, (uint)waveFormat.SampleRate);
                     }
                 }
             }
@@ -629,9 +630,9 @@ namespace rc2_dvm
                 
                 // Update state depending on ecryption status
                 if (callAlgoId != P25Defines.P25_ALGO_UNENCRYPT)
-                    dvmRadio.Status.State = rc2_core.RadioState.Encrypted;
+                    dvmRadio.Status.State = RadioState.Encrypted;
                 else
-                    dvmRadio.Status.State = rc2_core.RadioState.Receiving;
+                    dvmRadio.Status.State = RadioState.Receiving;
                 
                 // Start source ID display callback
                 lastSourceId = e.SrcId;
@@ -639,7 +640,7 @@ namespace rc2_dvm
                 // Start RX data timeout timer
                 rxDataTimer.Start();
                 // Status update
-                dvmRadio.StatusCallback();
+                dvmRadio.RadioStatusCallback();
                 
                 // Log
                 if (callAlgoId != P25Defines.P25_ALGO_UNENCRYPT)
@@ -695,8 +696,8 @@ namespace rc2_dvm
                 callInProgress = true;
                 status[FneSystemBase.P25_FIXED_SLOT].RxStart = pktTime;
                 // Update status
-                dvmRadio.Status.State = rc2_core.RadioState.Receiving;
-                dvmRadio.StatusCallback();
+                dvmRadio.Status.State = RadioState.Receiving;
+                dvmRadio.RadioStatusCallback();
                 // Log
                 if (callAlgoId != P25Defines.P25_ALGO_UNENCRYPT)
                 {

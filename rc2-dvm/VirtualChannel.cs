@@ -27,6 +27,7 @@ using NWaves.Operations;
 using Org.BouncyCastle.Asn1;
 using NAudio.Midi;
 using System.Linq.Expressions;
+using RadioConsole.Protocol;
 
 namespace rc2_dvm
 {
@@ -378,9 +379,11 @@ namespace rc2_dvm
                 Config.ListenAddress, Config.ListenPort,
                 RC2DVM.Configuration.Network.AllowedNetworks,
                 Config.Talkgroups, this,
-                HandleTxAudio,
                 waveFormat.SampleRate
             );
+
+            // Bind TX audio callback
+            dvmRadio.OnTxAudio += HandleTxAudio;
 
             dvmRadio.Status.ZoneName = Config.Zone;
             dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
@@ -401,13 +404,13 @@ namespace rc2_dvm
                 else
                     dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
                 // Update status
-                dvmRadio.StatusCallback();
+                dvmRadio.RadioStatusCallback();
                 showingSourceId = false;
             }
             else
             {
                 dvmRadio.Status.ChannelName = $"ID: {lastSourceId}";
-                dvmRadio.StatusCallback();
+                dvmRadio.RadioStatusCallback();
                 showingSourceId = true;
             }
         }
@@ -421,6 +424,23 @@ namespace rc2_dvm
         {
             Log.Logger.Warning("({0:l}) RX data timeout, resetting call", Config.Name);
             resetCall();
+        }
+
+        /// <summary>
+        /// Get the index of the named softkey in the status softkey list
+        /// </summary>
+        /// <param name="name"></param>
+        /// <returns></returns>
+        private int getSoftkeyIndex(SoftkeyName name)
+        {
+            for (int i = 0; i < dvmRadio.Status.Softkeys.Count; i++)
+            {
+                if (dvmRadio.Status.Softkeys[i].Name == SoftkeyName.SoftkeySec)
+                {
+                    return i;
+                }
+            }
+            return -1;
         }
 
         /// <summary>
@@ -478,7 +498,7 @@ namespace rc2_dvm
                 // Restart affiliation timer
                 resetAffTimer();
                 // Send status update
-                dvmRadio.StatusCallback();
+                dvmRadio.RadioStatusCallback();
                 // Log
                 Log.Logger.Debug("({0:l}) Selected TG {1:l} ({2})", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
                 // Return channel setup success
@@ -565,8 +585,7 @@ namespace rc2_dvm
             // By default, our channel state will be unencrypted until we properly configure everything
             dvmRadio.Status.Secure = false;
             // Update softkey
-            int softkeyIdx = dvmRadio.Status.Softkeys.FindIndex(key => key.Name == SoftkeyName.SEC);
-            dvmRadio.Status.Softkeys[softkeyIdx].State = SoftkeyState.Off;
+            dvmRadio.Status.Softkeys[getSoftkeyIndex(SoftkeyName.SoftkeySec)].State = SoftkeyState.SoftkeyOff;
 
             // Determine which TG we should be configuring for (scan TG or selected TG)
             TalkgroupConfigObject tg = CurrentTalkgroup;
@@ -616,7 +635,7 @@ namespace rc2_dvm
                 // Update status
                 dvmRadio.Status.Secure = true;
                 // Update softkey
-                dvmRadio.Status.Softkeys[softkeyIdx].State = SoftkeyState.On;
+                dvmRadio.Status.Softkeys[getSoftkeyIndex(SoftkeyName.SoftkeySec)].State = SoftkeyState.SoftkeyOn;
             }
 
             // Return true if nothing failed
@@ -690,7 +709,7 @@ namespace rc2_dvm
             callAlgoId = P25Defines.P25_ALGO_UNENCRYPT;
             FneUtils.Memset(callMi, 0x00, P25Defines.P25_MI_LENGTH);
             // Send status
-            dvmRadio.StatusCallback();
+            dvmRadio.RadioStatusCallback();
             // Log
             Log.Logger.Debug("({0:l}) reset call states", Config.Name);
         }
@@ -711,7 +730,7 @@ namespace rc2_dvm
             SetupChannelCrypto();
             // Reset the channel text & update status
             dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
-            dvmRadio.StatusCallback();
+            dvmRadio.RadioStatusCallback();
         }
 
         /// <summary>
@@ -867,7 +886,7 @@ namespace rc2_dvm
                 }
                 // Update status to transmitting
                 dvmRadio.Status.State = RadioState.Transmitting;
-                dvmRadio.StatusCallback();
+                dvmRadio.RadioStatusCallback();
 
                 return true;
             } else
@@ -908,7 +927,7 @@ namespace rc2_dvm
             }
             // Update radio status
             dvmRadio.Status.State = RadioState.Idle;
-            dvmRadio.StatusCallback();
+            dvmRadio.RadioStatusCallback();
             // Remove active TG
             return RC2DVM.fneSystem.RemoveActiveTalkgroup(txTalkgroup.DestinationId, txTalkgroup.Timeslot);
         }
@@ -932,12 +951,19 @@ namespace rc2_dvm
         }
 
         /// <summary>
-        /// Handler for TX audio samples coming from WebRTC connection
+        /// Handler for TX audio samples coming from RC2 console
         /// </summary>
         /// <param name="pcm16Samples"></param>
-        /// <param name="pcmSampleRate"></param>
-        public void HandleTxAudio(short[] pcm16Samples)
+        /// <param name="sampleRate"></param>
+        public void HandleTxAudio(short[] pcm16Samples, int sampleRate)
         {
+            // Ensure samplerate is correct
+            if (sampleRate != FneSystemBase.SAMPLE_RATE)
+            {
+                Log.Logger.Error("Got invalid TX audio sample rate from console: {consoleRate} != {p25rate}", sampleRate, FneSystemBase.SAMPLE_RATE);
+                return;
+            }
+
             // Ignore if we're not transmitting
             if (dvmRadio.Status.State != RadioState.Transmitting)
             {
@@ -1007,7 +1033,7 @@ namespace rc2_dvm
             // Debug print
             Log.Logger.Debug("({0:l}) Sending ATG tone to Radio ({0} samples / {1} LDU frames)", Config.Name, toneAtg.Length, skipFrames);
             // Send audio
-            dvmRadio.RxSendPCM16Samples(toneAtg, (uint)waveFormat.SampleRate);
+            dvmRadio.SendRxPCM16Samples(toneAtg, (uint)waveFormat.SampleRate);
             // Return
             return skipFrames;
         }
@@ -1056,8 +1082,7 @@ namespace rc2_dvm
                 // Revert to the currently selected TG name
                 dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
                 // Update softkey
-                int keyIdx = dvmRadio.Status.Softkeys.FindIndex(key => key.Name == SoftkeyName.SCAN);
-                dvmRadio.Status.Softkeys[keyIdx].State = SoftkeyState.Off;
+                dvmRadio.Status.Softkeys[getSoftkeyIndex(SoftkeyName.SoftkeyScan)].State = SoftkeyState.SoftkeyOff;
             }
             else
             {
@@ -1066,11 +1091,10 @@ namespace rc2_dvm
                 // Update radio state
                 dvmRadio.Status.ScanState = ScanState.Scanning;
                 // Update softkey
-                int keyIdx = dvmRadio.Status.Softkeys.FindIndex(key => key.Name == SoftkeyName.SCAN);
-                dvmRadio.Status.Softkeys[keyIdx].State = SoftkeyState.On;
+                dvmRadio.Status.Softkeys[getSoftkeyIndex(SoftkeyName.SoftkeyScan)].State = SoftkeyState.SoftkeyOn;
             }
             // Status update
-            dvmRadio.StatusCallback();
+            dvmRadio.RadioStatusCallback();
             // Always return true for now (TODO: Return false for invalid scan configurations)
             return true;
         }

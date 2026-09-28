@@ -8,6 +8,7 @@ using Serilog;
 using fnecore.P25;
 using rc2_core;
 using rc2_dvm;
+using RadioConsole.Protocol;
 
 namespace rc2_dvm
 {
@@ -16,10 +17,10 @@ namespace rc2_dvm
         // Fixed softkeys for a DVM channel
         internal static List<SoftkeyName> DVMSoftkeys = new List<SoftkeyName>
         {
-            SoftkeyName.HOME,
-            SoftkeyName.SCAN,
-            SoftkeyName.SEC,
-            SoftkeyName.DEL
+            SoftkeyName.SoftkeyHome,
+            SoftkeyName.SoftkeyScan,
+            SoftkeyName.SoftkeySec,
+            SoftkeyName.SoftkeyDel
         };
 
         // Talkgroup list
@@ -42,7 +43,8 @@ namespace rc2_dvm
             IPAddress listenAddress, int listenPort,
             List<IPNetwork> allowedNetworks,
             List<TalkgroupConfigObject> talkgroups, VirtualChannel vChannel, 
-            Action<short[]> txAudioCallback, int txAudioSampleRate) : base(name, "", rxOnly, listenAddress, listenPort, allowedNetworks, DVMSoftkeys, null, null, txAudioCallback, txAudioSampleRate)
+            int txAudioSampleRate
+            ) : base(name, "", rxOnly, listenAddress, listenPort, allowedNetworks, DVMSoftkeys, null, null, txAudioSampleRate)
         {
             this.talkgroups = talkgroups;
             this.vChannel = vChannel;
@@ -93,7 +95,7 @@ namespace rc2_dvm
             switch (name)
             {
                 // Secure button
-                case SoftkeyName.SEC:
+                case SoftkeyName.SoftkeySec:
                     // If current talkgroup is strapped, bonk
                     if (vChannel.CurrentTalkgroup.Strapped)
                     {
@@ -125,15 +127,15 @@ namespace rc2_dvm
                     return vChannel.SetupChannelCrypto();
 
                 // HOME
-                case SoftkeyName.HOME:
+                case SoftkeyName.SoftkeyHome:
                     return vChannel.GoHome();
 
                 // SCAN
-                case SoftkeyName.SCAN:
+                case SoftkeyName.SoftkeyScan:
                     return vChannel.ToggleScan();
 
                 // DEL (Nuisance Delete)
-                case SoftkeyName.DEL:
+                case SoftkeyName.SoftkeyDel:
                     return vChannel.NuisanceDelete();
                 
                 // Handle unhandled buttons
