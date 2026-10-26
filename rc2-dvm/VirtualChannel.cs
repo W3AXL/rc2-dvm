@@ -124,11 +124,11 @@ namespace rc2_dvm
         /// <summary>
         /// Currently selected talkgroup for this channel
         /// </summary>
-        public TalkgroupConfigObject CurrentTalkgroup
+        public TalkgroupConfigObject? CurrentTalkgroup
         {
             get
             {
-                return Config.Talkgroups[currentTgIdx];
+                return Config.Talkgroups?[currentTgIdx];
             }
         }
 
@@ -139,12 +139,7 @@ namespace rc2_dvm
         {
             get
             {
-                return (
-                    dvmRadio.Status.State == RadioState.Idle ||
-                    dvmRadio.Status.State == RadioState.Transmitting ||
-                    dvmRadio.Status.State == RadioState.Receiving ||
-                    dvmRadio.Status.State == RadioState.Encrypted
-                    );
+                return dvmRadio.ConsoleReady;
             }
         }
 
@@ -288,7 +283,7 @@ namespace rc2_dvm
             rxAudioFilter = new LowPassFilter(high_cutoff, 8);
 
             // Tone detector
-            toneDetector = new MBEToneDetector(Config.Audio.TxToneRatio, Config.Audio.TxToneHits, Config.Audio.TxToneLowerLimit, Config.Audio.TxToneUpperLimit);
+            toneDetector = new MBEToneDetector(Config.Audio.TxToneLowerLimit, Config.Audio.TxToneUpperLimit);
 
             // TX Local Repeat Audio
             if (Config.Audio.TxLocalRepeat)
@@ -340,8 +335,6 @@ namespace rc2_dvm
             Log.Logger.Information("        TX Tone Detection:   {TxToneDetection}", Config.Audio.TxToneDetection);
             if (Config.Audio.TxToneDetection)
             {
-                Log.Logger.Information("        TX Tone Threshold:   {TxToneRatio}", Config.Audio.TxToneRatio);
-                Log.Logger.Information("        TX Tone Hits:        {TxToneHits}", Config.Audio.TxToneHits);
                 Log.Logger.Information("        TX Tone Valid Range: {TxToneLowerLimit} Hz to {TxToneUpperLimit} Hz", Config.Audio.TxToneLowerLimit, Config.Audio.TxToneUpperLimit);
             }
             Log.Logger.Information("    Mode: {Mode:l}", Config.Mode.ToString());
@@ -435,7 +428,7 @@ namespace rc2_dvm
         {
             for (int i = 0; i < dvmRadio.Status.Softkeys.Count; i++)
             {
-                if (dvmRadio.Status.Softkeys[i].Name == SoftkeyName.SoftkeySec)
+                if (dvmRadio.Status.Softkeys[i].Name == name)
                 {
                     return i;
                 }
@@ -638,6 +631,9 @@ namespace rc2_dvm
                 dvmRadio.Status.Softkeys[getSoftkeyIndex(SoftkeyName.SoftkeySec)].State = SoftkeyState.SoftkeyOn;
             }
 
+            // Send a status update
+            dvmRadio.RadioStatusCallback();
+
             // Return true if nothing failed
             cryptoConfigured = true;
             return true;
@@ -698,8 +694,11 @@ namespace rc2_dvm
                 dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
             // Stop rx data timeout timer
             rxDataTimer.Stop();
-            // Reset P25 counter
-            p25N = 0;
+            // Reset P25 counter (inside tx lock just in case)
+            lock (txLock)
+            {
+                p25N = 0;
+            }
             // Update status to idle if connected
             if (Connected)
                 dvmRadio.Status.State = RadioState.Idle;
@@ -875,6 +874,9 @@ namespace rc2_dvm
                     crypto.SetKey(txTalkgroup.KeyId, P25Defines.P25_ALGO_UNENCRYPT, new byte[7]);
                     Log.Logger.Information("({0:l}) Start TX on TG {1} ({2})", Config.Name, txTalkgroup.Name, txTalkgroup.DestinationId);
                 }
+
+                // Clear out our tone tracking variables
+                toneDetector.Reset();
 
                 // Get new stream ID
                 txStreamId = RC2DVM.fneSystem.NewStreamId();

@@ -10,7 +10,7 @@
     <Nullable>enable</Nullable>
     <Title>RC2-DVM</Title>
     <Description>RadioConsole2 DVM FNE Interface Daemon</Description>
-    <Copyright>Copyright (c) 2025 Patrick McDonnell W3AXL</Copyright>
+    <Copyright>Copyright (C) 2026 W3AXL</Copyright>
     <Product>RadioConsole2 DVM FNE Interface Daemon</Product>
     <Platforms>x86;AnyCPU</Platforms>
     <PlatformTarget>x86</PlatformTarget>

@@ -123,6 +123,7 @@ namespace rc2_dvm
                         vChannel.Secure = !vChannel.Secure;
                         Log.Logger.Information("Toggling secure mode for radio {name:l}: {state:l}", vChannel.Config.Name, (vChannel.Secure ? "ON" : "OFF"));
                     }
+                    
                     // Return channel setup success/failure
                     return vChannel.SetupChannelCrypto();
 

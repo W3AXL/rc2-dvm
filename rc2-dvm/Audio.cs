@@ -36,7 +36,7 @@ namespace rc2_dvm
             {
                 int v = (int)(floats[i] * short.MaxValue);
                 if (v > short.MaxValue) { v = short.MaxValue; }
-                if (v < short.MinValue) { v = -short.MinValue; }
+                if (v < short.MinValue) { v = short.MinValue; }
                 pcm16[i] = (short)v;
             }
             return pcm16;
@@ -73,7 +73,7 @@ namespace rc2_dvm
         /// <returns></returns>
         public static float DBtoLinear(float db)
         {
-            return (float)Math.Pow((db / 20.0f), 10);
+            return (float)Math.Pow(10, (db / 20.0f));
         }
     }
 
@@ -95,100 +95,141 @@ namespace rc2_dvm
         private int low_bin_limit;
         private int high_bin_limit;
 
-        // This is the tone detection ratio (amplitude of max bin divided by average of all others)
-        private int detect_ratio;
-
-        // This is the number of "hits" on a frequency we need to get before we detect a valid tone
-        private int hits_reqd;
-
-        // Counter for the above hits
-        private int hits_freq;
-        private int num_hits;
-
         // The STFT (short-time fourier transform) operator
         private Stft stft;
 
+        // Tracker for last tone detected
+        private int last_tone = 0;
+
         /// <summary>
-        /// Create a pitch detector which reports the running average of pitch for a sequence of samples
+        /// Detector threshold for detecting the start of a tone
         /// </summary>
-        /// <param name="detect_ratio">Ratio required for a valid tone detection</param>
-        /// <param name="hits_reqd">Number of repeated "hits" on a frequency to count as a tone detection</param>
-        public MBEToneDetector(int detect_ratio = 90, int hits_reqd = 2, int low_limit = 250, int high_limit = 3000)
+        private const float TONE_START_THRESHOLD = 0.6f;
+        /// <summary>
+        /// Detector threshold for detecting the end of a tone (allows for hysteresis)
+        /// </summary>
+        private const float TONE_END_THRESHOLD = 0.3f;
+        /// <summary>
+        /// Minimum RMS signal power required to perform tone detection
+        /// </summary>
+        private const float MIN_SIGNAL_RMS = 0.02f;
+
+        /// <summary>
+        /// Returns the fraction (out of 1) of a frame's energy that consists of the desired tone frequency in Hz
+        /// </summary>
+        /// <param name="samples"></param>
+        /// <param name="tone_hz"></param>
+        /// <returns></returns>
+        public static float GetToneFraction(float[] samples, float tone_hz)
         {
-            this.detect_ratio = detect_ratio;
-            this.hits_reqd = hits_reqd;
-            stft = new Stft(window_size, 1, NWaves.Windows.WindowType.Hann, num_coeffs);
-            hits_freq = 0;
-            num_hits = 0;
-            low_bin_limit = (int)(low_limit / bin_size_hz);
-            high_bin_limit = (int)(high_limit / bin_size_hz);
+            // Calculate squared sum total energy of the sample array
+            double total = 1e-9;
+            foreach (float sample in samples) total += (double)sample * (double)sample;
+
+            // Perform Goertzel algoritm at 3 frequencies (the current tone frequency and one bin on either side) and get the max power 
+            double maxPwr = 0;
+            for (int k = -1; k <= 1; k++)
+            {
+                // Convert frequency to radians/s
+                double w = 2.0 * Math.PI * (tone_hz + (k * bin_size_hz)) / sample_rate;
+                // Calculate cosine coefficient
+                double c = 2.0 * Math.Cos(w);
+                // Initialize s1 & s2 state tracking vars
+                double s1 = 0;
+                double s2 = 0;
+                // Iterate over samples and perform the calculation
+                foreach (float sample in samples)
+                {
+                    double s = sample + c * s1 - s2;
+                    s2 = s1;
+                    s1 = s; 
+                }
+                // Calculate the total power of the bin
+                double p = s1 * s1 + s2 * s2 - c * s1 * s2;
+                // Check if this is a new max
+                maxPwr = Math.Max(maxPwr, 2.0 * p / (samples.Length * total));
+            }
+            // Return the max power measured by the algo
+            return (float)maxPwr;
         }
 
         /// <summary>
-        /// Perform a tone analysis on the provided samples, and return a tone frequency if one is detected
+        /// Create a tone detector with hysteresis for detecting tones within a range from an audio signal
         /// </summary>
-        /// <param name="samples"></param>
+        /// <param name="low_limit_hz"></param>
+        /// <param name="high_limit_hz"></param>
+        public MBEToneDetector(int low_limit_hz = 250, int high_limit_hz = 3000)
+        {
+            // Init the singletone fourier transform
+            stft = new Stft(window_size, 1, NWaves.Windows.WindowType.Hann, num_coeffs);
+            // Calculate our bin limits from the low & high frequency limits
+            low_bin_limit = (int)(low_limit_hz / bin_size_hz);
+            high_bin_limit = (int)(high_limit_hz / bin_size_hz);
+        }
+
+        /// <summary>
+        /// Perform gated tone detection on an audio signal and return the detected tone frequency in Hz, or 0 if no tone detected
+        /// </summary>
+        /// <param name="signal"></param>
         /// <returns></returns>
         public int Detect(DiscreteSignal signal)
         {
-            // Validate input
+            // Validate signal length & samplerate
             if (signal.Length != window_size)
-            {
-                throw new ArgumentOutOfRangeException($"Signal must be {window_size} samples long!");
-            }
+                throw new ArgumentOutOfRangeException($"Signal must be {window_size} samples long");
             if (signal.SamplingRate != sample_rate)
+                throw new ArgumentOutOfRangeException($"Signal samplerate must be {sample_rate}");
+
+            // Detect silence and ignore
+            double e = 0;
+            // Sum of squares for total signal energy
+            foreach (float v in signal.Samples) e += (double)v * v;
+            // Check if our RMS signal is above the threshold
+            if (Math.Sqrt(e / signal.Length) < MIN_SIGNAL_RMS)
             {
-                throw new ArgumentOutOfRangeException($"Signal must have sample rate of {sample_rate} Hz!");
+                // Reset
+                last_tone = 0;
+                return 0;
             }
-            
-            // Analyze
+
+            // Find the peak tone frequency of this signal
             float[] values = stft.Spectrogram(signal)[0];
-
-            // Remove bins outside our limit
-            float[] limited_values = values[low_bin_limit..high_bin_limit];
-
-            // Find max (from https://stackoverflow.com/a/50239922/1842613)
-            (float max_val, int max_idx) = limited_values.Select((n, i) => (n, i)).Max();
-
-            // Add back in our lower limit so the index is correct
-            max_idx += low_bin_limit;
-
-            // Calculate sum of all others
-            float sum = values.Sum() - max_val;
-
-            // Find average
-            float avg = sum / (window_size - 1);
-
-            // Find ratio
-            float ratio = max_val / avg;
-
-            // Debug
-            //Log.Logger.Debug($"(Tone detector): max at {max_idx} ({(int)(max_idx * bin_size_hz)} Hz): {max_val}, ratio: {ratio}");
-
-            // Return if above threshold
-            if (ratio > detect_ratio)
+            int peak_idx = low_bin_limit;
+            for (int i = low_bin_limit; i < high_bin_limit; i++)
             {
-                // Calculate the tone frequency
-                int tone_freq = (int)(bin_size_hz * max_idx);
-
-                // Determine hits
-                if (hits_freq == tone_freq)
-                {
-                    num_hits++;
-                    if (num_hits >= hits_reqd)
-                    {
-                        // Debug
-                        //Log.Logger.Debug($"Detected {tone_freq} Hz tone! (ratio {ratio})");
-                        return tone_freq;
-                    }
-                }
-                else
-                {
-                    num_hits = 1;
-                    hits_freq = tone_freq;
-                }
+                if (values[i] > values[peak_idx]) peak_idx = i;
             }
+            // Get freq from peak index
+            int freq = (int)(peak_idx * bin_size_hz);
+
+            // Tolerance for one bin on either side of the last tone, so we don't constantly flutter around
+            if (last_tone != 0 && Math.Abs(freq - last_tone) <= (int)(bin_size_hz * 1.01f))
+                freq = last_tone;
+
+            // Now measure the goertzel fraction for the detected tone frequency
+            float frac = GetToneFraction(signal.Samples, freq);
+
+            // TEMP debug logging
+            Log.Logger.Debug("TONE FRAC {0:0.000}", frac);
+
+            // Determine which threshold we should be using
+            float threshold = (last_tone != 0) ? TONE_END_THRESHOLD : TONE_START_THRESHOLD;
+
+            // Check threshold
+            if (frac >= threshold)
+            {
+                last_tone = freq;
+                return freq;
+            }
+
+            // Return 0 if tone detection failed
+            last_tone = 0;
             return 0;
+        }
+
+        public void Reset()
+        {
+            last_tone = 0;
         }
     }
 }

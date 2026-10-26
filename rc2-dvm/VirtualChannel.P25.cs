@@ -18,6 +18,8 @@ using System.Text;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using RadioConsole.Protocol;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 
 namespace rc2_dvm
 {
@@ -43,6 +45,11 @@ namespace rc2_dvm
         private static short[] silence = new short[FneSystemBase.MBE_SAMPLES_LENGTH];
 
         /// <summary>
+        /// Lock object for ensuring only one function is handling TX at a time
+        /// </summary>
+        private readonly object txLock = new();
+
+        /// <summary>
         /// Helper to send a P25 terminator message
         /// </summary>
         /// <param name="srcId"></param>
@@ -50,23 +57,30 @@ namespace rc2_dvm
         /// <param name="grantDemand"></param>
         private void P25TDUHelper(uint srcId, uint dstId, bool grantDemand = false)
         {
-            // Send the TDU once if grant demand is enabled
-            if (grantDemand)
+            lock (txLock)
             {
-                Log.Logger.Debug("({0:l}) Sending P25 TDU grant demand for SrcId {srcId}, DstId {dstId}", Config.Name, srcId, dstId);
-                RC2DVM.fneSystem.SendP25TDU(srcId, dstId, grantDemand);
-            }
-            else
-            {
-                for (int i = 0; i < 4; i++)
+                // Send the TDU once if grant demand is enabled
+                if (grantDemand)
                 {
-                    Log.Logger.Debug("({0:l}) Sending P25 call termination TDU for SrcId {srcId}, DstId {dstId}", Config.Name, srcId, dstId);
-                    RC2DVM.fneSystem.SendP25TDU(srcId, dstId, false);
+                    Log.Logger.Debug("({0:l}) Sending P25 TDU grant demand for SrcId {srcId}, DstId {dstId}", Config.Name, srcId, dstId);
+                    RC2DVM.fneSystem.SendP25TDU(srcId, dstId, grantDemand);
                 }
-            }
+                else
+                {
+                    // Pad silence to LDU boundary
+                    padLDU(srcId, dstId);
 
-            p25SeqNo = 0;
-            p25N = 0;
+                    // We send 4 TDUs (hacky way to ensure the call end flags don't get missed)
+                    for (int i = 0; i < 4; i++)
+                    {
+                        Log.Logger.Debug("({0:l}) Sending P25 call termination TDU for SrcId {srcId}, DstId {dstId}", Config.Name, srcId, dstId);
+                        RC2DVM.fneSystem.SendP25TDU(srcId, dstId, false);
+                    }
+                }
+
+                p25SeqNo = 0;
+                p25N = 0;
+            }
         }
 
         /// <summary>
@@ -83,37 +97,35 @@ namespace rc2_dvm
                 throw new ArgumentException($"Input samples not proper length for MBE encoding! Got {pcm16.Length} but need {FneSystemBase.MBE_SAMPLES_LENGTH}");
             }
 
-            if (p25N > 17)
-                p25N = 0;
-            if (p25N == 0)
-                FneUtils.Memset(netLDU1, 0, 9 * 25);
-            if (p25N == 9)
-                FneUtils.Memset(netLDU2, 0, 9 * 25);
-
-            // Log.Logger.Debug($"BYTE BUFFER {FneUtils.HexDump(pcm)}");
-
-            // Convert to floats
-            float[] fSamples = Utils.PcmToFloat(pcm16);
-
-            // Convert to signal
-            DiscreteSignal signal = new DiscreteSignal(waveFormat.SampleRate, fSamples, true);
-
-            // buffer for IMBE codeword
-            byte[] imbe = new byte[FneSystemBase.IMBE_BUF_LEN];
-
-            // Detect tone and send tone codeword if detected
-            int tone = 0;
-            if (Config.Audio.TxToneDetection)
+            // Grab the lock
+            lock (txLock)
             {
-                tone = toneDetector.Detect(signal);
-            }
-            if (tone > 0)
-            {
-                MBEToneGenerator.IMBEEncodeSingleTone((ushort)tone, imbe);
-                Log.Logger.Debug("({0:l}) P25D: {1} HZ TONE DETECT", Config.Name, tone);
-            }
-            else
-            {
+                // Log.Logger.Debug($"BYTE BUFFER {FneUtils.HexDump(pcm)}");
+
+                // Convert to floats
+                float[] fSamples = Utils.PcmToFloat(pcm16);
+
+                // Convert to signal
+                DiscreteSignal signal = new DiscreteSignal(waveFormat.SampleRate, fSamples, true);
+
+                // buffer for IMBE codeword
+                byte[] imbe = new byte[FneSystemBase.IMBE_BUF_LEN];
+
+                // Detect tone and send tone codeword if detected
+                int tone = 0;
+                if (Config.Audio.TxToneDetection)
+                {
+                    tone = toneDetector.Detect(signal);
+                }
+                if (tone > 0)
+                {
+                    // Generate the current tone data
+                    MBEToneGenerator.IMBEEncodeSingleTone((ushort)tone, imbe);
+                    Log.Logger.Debug("({0:l}) P25D: {1} HZ TONE DETECT", Config.Name, tone);
+                }
+
+                // Even if we detected a tone above, run the IMBE encoder to ensure no weird glitches
+
                 // Apply filter
                 DiscreteSignal filtered = txAudioFilter.ApplyTo(signal);
 
@@ -134,208 +146,271 @@ namespace rc2_dvm
                 //Log.Logger.Debug($"SAMPLE BUFFER {FneUtils.HexDump(filtered16)}");
 
                 // encode PCM samples into IMBE codewords
+                byte[] audioImbe = new byte[FneSystemBase.IMBE_BUF_LEN];
 #if WIN32
                 if (extFullRateVocoder != null)
-                    extFullRateVocoder.encode(filtered16, out imbe);
+                    extFullRateVocoder.encode(filtered16, out audioImbe);
                 else
-                    encoder.encode(filtered16, imbe);
+                    encoder.encode(filtered16, audioImbe);
 #else
-                encoder.encode(filtered16, imbe);
+                encoder.encode(filtered16, audioImbe);
 #endif
-                //Log.Logger.Debug($"IMBE {FneUtils.HexDump(imbe)}");
-            }
+                
+                // If we didn't detect a tone, write to the main imbe array
+                if (tone == 0)
+                {
+                    //Log.Logger.Debug($"IMBE {FneUtils.HexDump(audioImbe)}");
+                    imbe = audioImbe;
+                }
 
 #if ENCODER_LOOPBACK_TEST
-            short[] samp2 = null;
-            int errs = p25Decoder.decode(imbe, out samp2);
-            if (samples != null)
-            {
-                Log.Logger.Debug($"LOOPBACK_TEST IMBE {FneUtils.HexDump(imbe)}");
-                Log.Logger.Debug($"LOOPBACK_TEST SAMPLE BUFFER {FneUtils.HexDump(samp2)}");
-
-                int pcmIdx = 0;
-                byte[] pcm2 = new byte[samp2.Length * 2];
-                for (int smpIdx2 = 0; smpIdx2 < samp2.Length; smpIdx2++)
+                short[] samp2 = null;
+                int errs = p25Decoder.decode(imbe, out samp2);
+                if (samples != null)
                 {
-                    pcm2[pcmIdx + 0] = (byte)(samp2[smpIdx2] & 0xFF);
-                    pcm2[pcmIdx + 1] = (byte)((samp2[smpIdx2] >> 8) & 0xFF);
-                    pcmIdx += 2;
-                }
+                    Log.Logger.Debug($"LOOPBACK_TEST IMBE {FneUtils.HexDump(imbe)}");
+                    Log.Logger.Debug($"LOOPBACK_TEST SAMPLE BUFFER {FneUtils.HexDump(samp2)}");
 
-                Log.Logger.Debug($"LOOPBACK_TEST BYTE BUFFER {FneUtils.HexDump(pcm2)}");
-                waveProvider.AddSamples(pcm2, 0, pcm2.Length);
-            }
-#else
-            // Encrypt call if encryption selected or strapped
-            if (CurrentTalkgroup.Strapped || Secure)
-            {
-
-                // KEYFAIL if keys aren't loaded
-                if (!loadedKeys.ContainsKey(CurrentTalkgroup.KeyId))
-                {
-                    Log.Logger.Error("({0:l}) KEYFAIL: {TG} ({TGID}) configured for missing Key ID {id}", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId, CurrentTalkgroup.KeyId);
-                    return;
-                }
-
-                // Set up initial MI
-                if (p25N == 0)
-                {
-                    if (callMi.All(b => b == 0))
+                    int pcmIdx = 0;
+                    byte[] pcm2 = new byte[samp2.Length * 2];
+                    for (int smpIdx2 = 0; smpIdx2 < samp2.Length; smpIdx2++)
                     {
-                        Random random = new Random();
+                        pcm2[pcmIdx + 0] = (byte)(samp2[smpIdx2] & 0xFF);
+                        pcm2[pcmIdx + 1] = (byte)((samp2[smpIdx2] >> 8) & 0xFF);
+                        pcmIdx += 2;
+                    }
 
-                        for (int i = 0; i < P25Defines.P25_MI_LENGTH; i++)
+                    Log.Logger.Debug($"LOOPBACK_TEST BYTE BUFFER {FneUtils.HexDump(pcm2)}");
+                    waveProvider.AddSamples(pcm2, 0, pcm2.Length);
+                }
+#else
+                // Pack the IMBE frame
+                P25PackImbeFrame(imbe, srcId, dstId);
+#endif
+            }
+        }
+
+        /// <summary>
+        /// Handles optional encrypting of IMBE frames, packing of frames into LDUs, and sending of LDUs once the buffer has filled
+        /// </summary>
+        /// <param name="imbe"></param>
+        /// <param name="srcId"></param>
+        /// <param name="dstId"></param>
+        /// <returns></returns>
+        private bool P25PackImbeFrame(byte[] imbe, uint srcId, uint dstId)
+        {
+            // Grab lock
+            lock (txLock)
+            {
+                // Check our current P25 indicies and clear any buffers needed
+                if (p25N > 17)
+                    p25N = 0;
+                if (p25N == 0)
+                    FneUtils.Memset(netLDU1, 0, 9 * 25);
+                if (p25N == 9)
+                    FneUtils.Memset(netLDU2, 0, 9 * 25);
+
+                // Encrypt call if encryption selected or strapped
+                if (CurrentTalkgroup.Strapped || Secure)
+                {
+
+                    // KEYFAIL if keys aren't loaded
+                    if (!loadedKeys.ContainsKey(CurrentTalkgroup.KeyId))
+                    {
+                        Log.Logger.Error("({0:l}) KEYFAIL: {TG} ({TGID}) configured for missing Key ID {id}", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId, CurrentTalkgroup.KeyId);
+                        return false;
+                    }
+
+                    // Set up initial MI
+                    if (p25N == 0)
+                    {
+                        if (callMi.All(b => b == 0))
                         {
-                            callMi[i] = (byte)random.Next(0x00, 0x100);
+                            Random random = new Random();
+
+                            for (int i = 0; i < P25Defines.P25_MI_LENGTH; i++)
+                            {
+                                callMi[i] = (byte)random.Next(0x00, 0x100);
+                            }
+                        }
+                        if (!crypto.Prepare(CurrentTalkgroup.AlgId, CurrentTalkgroup.KeyId, callMi))
+                        {
+                            Log.Logger.Error("({0:l}) Failed to prepare crypto params for Key {keyId}", Config.Name, CurrentTalkgroup.KeyId);
+                            return false;
+                        }
+                        //Log.Logger.Debug("({0:l}) Prepared initial crypto params for TX", Config.Name);
+                    }
+
+                    // Encrypt
+                    if (!crypto.Process(imbe, p25N < 9U ? P25DUID.LDU1 : P25DUID.LDU2))
+                    {
+                        Log.Logger.Error("({0:l}) Failed to encrypt call data!", Config.Name);
+                        return false;
+                    }
+
+                    // Prepare a new MI on last block of LDU2
+                    if (p25N == 17U)
+                    {
+                        P25Crypto.CycleP25Lfsr(callMi);
+                        if (!crypto.Prepare(CurrentTalkgroup.AlgId, CurrentTalkgroup.KeyId, callMi))
+                        {
+                            Log.Logger.Error("({0:l}) Failed to prepare crypto params for Key {keyId}", Config.Name, CurrentTalkgroup.KeyId);
+                            return false;
                         }
                     }
-                    if (!crypto.Prepare(CurrentTalkgroup.AlgId, CurrentTalkgroup.KeyId, callMi))
-                    {
-                        Log.Logger.Error("({0:l}) Failed to prepare crypto params for Key {keyId}", Config.Name, CurrentTalkgroup.KeyId);
-                        return;
-                    }
-                    //Log.Logger.Debug("({0:l}) Prepared initial crypto params for TX", Config.Name);
+
+                    //Log.Logger.Debug("({0:l}) TG {tg} ({TGID}) is strapped or switched secure", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
                 }
 
-                // Encrypt
-                if (!crypto.Process(imbe, p25N < 9U ? P25DUID.LDU1 : P25DUID.LDU2))
+                // fill the LDU buffers appropriately
+                switch (p25N)
                 {
-                    Log.Logger.Error("({0:l}) Failed to encrypt call data!");
-                    return;
+                    // LDU1
+                    case 0:
+                        Buffer.BlockCopy(imbe, 0, netLDU1, 10, FneSystemBase.IMBE_BUF_LEN);
+                        break;
+                    case 1:
+                        Buffer.BlockCopy(imbe, 0, netLDU1, 26, FneSystemBase.IMBE_BUF_LEN);
+                        break;
+                    case 2:
+                        Buffer.BlockCopy(imbe, 0, netLDU1, 55, FneSystemBase.IMBE_BUF_LEN);
+                        break;
+                    case 3:
+                        Buffer.BlockCopy(imbe, 0, netLDU1, 80, FneSystemBase.IMBE_BUF_LEN);
+                        break;
+                    case 4:
+                        Buffer.BlockCopy(imbe, 0, netLDU1, 105, FneSystemBase.IMBE_BUF_LEN);
+                        break;
+                    case 5:
+                        Buffer.BlockCopy(imbe, 0, netLDU1, 130, FneSystemBase.IMBE_BUF_LEN);
+                        break;
+                    case 6:
+                        Buffer.BlockCopy(imbe, 0, netLDU1, 155, FneSystemBase.IMBE_BUF_LEN);
+                        break;
+                    case 7:
+                        Buffer.BlockCopy(imbe, 0, netLDU1, 180, FneSystemBase.IMBE_BUF_LEN);
+                        break;
+                    case 8:
+                        Buffer.BlockCopy(imbe, 0, netLDU1, 204, FneSystemBase.IMBE_BUF_LEN);
+                        break;
+
+                    // LDU2
+                    case 9:
+                        Buffer.BlockCopy(imbe, 0, netLDU2, 10, FneSystemBase.IMBE_BUF_LEN);
+                        break;
+                    case 10:
+                        Buffer.BlockCopy(imbe, 0, netLDU2, 26, FneSystemBase.IMBE_BUF_LEN);
+                        break;
+                    case 11:
+                        Buffer.BlockCopy(imbe, 0, netLDU2, 55, FneSystemBase.IMBE_BUF_LEN);
+                        break;
+                    case 12:
+                        Buffer.BlockCopy(imbe, 0, netLDU2, 80, FneSystemBase.IMBE_BUF_LEN);
+                        break;
+                    case 13:
+                        Buffer.BlockCopy(imbe, 0, netLDU2, 105, FneSystemBase.IMBE_BUF_LEN);
+                        break;
+                    case 14:
+                        Buffer.BlockCopy(imbe, 0, netLDU2, 130, FneSystemBase.IMBE_BUF_LEN);
+                        break;
+                    case 15:
+                        Buffer.BlockCopy(imbe, 0, netLDU2, 155, FneSystemBase.IMBE_BUF_LEN);
+                        break;
+                    case 16:
+                        Buffer.BlockCopy(imbe, 0, netLDU2, 180, FneSystemBase.IMBE_BUF_LEN);
+                        break;
+                    case 17:
+                        Buffer.BlockCopy(imbe, 0, netLDU2, 204, FneSystemBase.IMBE_BUF_LEN);
+                        break;
                 }
 
-                // Prepare a new MI on last block of LDU2
+                FnePeer peer = RC2DVM.fneSystem.peer;
+                RemoteCallData callData = new RemoteCallData()
+                {
+                    SrcId = srcId,
+                    DstId = dstId,
+                    LCO = P25Defines.LC_GROUP
+                };
+
+                // Setup crypto params
+                CryptoParams cryptoParams = new CryptoParams();
+                if (CurrentTalkgroup.AlgId != P25Defines.P25_ALGO_UNENCRYPT && CurrentTalkgroup.KeyId > 0 && (CurrentTalkgroup.Strapped || Secure))
+                {
+                    cryptoParams.AlgoId = CurrentTalkgroup.AlgId;
+                    cryptoParams.KeyId = CurrentTalkgroup.KeyId;
+                    Array.Copy(callMi, cryptoParams.MI, P25Defines.P25_MI_LENGTH);
+                }
+
+                // send P25 LDU1
+                if (p25N == 8U)
+                {
+                    ushort pktSeq = 0;
+                    if (p25SeqNo == 0U)
+                        pktSeq = peer.pktSeq(true);
+                    else
+                        pktSeq = peer.pktSeq();
+
+                    Log.Logger.Information("({0:l}) P25D: Traffic *VOICE FRAME LDU1* PEER {1} SRC_ID {2} TGID {3} [STREAM ID {4}]", Config.Name, RC2DVM.fneSystem.PeerId, srcId, dstId, txStreamId);
+
+                    byte[] payload = new byte[200];
+                    RC2DVM.fneSystem.CreateP25MessageHdr((byte)P25DUID.LDU1, callData, ref payload, cryptoParams);
+                    RC2DVM.fneSystem.CreateP25LDU1Message(netLDU1, ref payload, srcId, dstId);
+
+                    peer.SendMaster(new Tuple<byte, byte>(Constants.NET_FUNC_PROTOCOL, Constants.NET_PROTOCOL_SUBFUNC_P25), payload, pktSeq, txStreamId);
+                }
+
+                // send P25 LDU2
                 if (p25N == 17U)
                 {
-                    P25Crypto.CycleP25Lfsr(callMi);
-                    if (!crypto.Prepare(CurrentTalkgroup.AlgId, CurrentTalkgroup.KeyId, callMi))
-                    {
-                        Log.Logger.Error("({0:l}) Failed to prepare crypto params for Key {keyId}", Config.Name, CurrentTalkgroup.KeyId);
-                        return;
-                    }
+                    ushort pktSeq = 0;
+                    if (p25SeqNo == 0U)
+                        pktSeq = peer.pktSeq(true);
+                    else
+                        pktSeq = peer.pktSeq();
+
+                    Log.Logger.Information("({0:l}) P25D: Traffic *VOICE FRAME LDU2* PEER {1} SRC_ID {2} TGID {3} [STREAM ID {4}]", Config.Name, RC2DVM.fneSystem.PeerId, srcId, dstId, txStreamId);
+
+                    byte[] payload = new byte[200];
+                    RC2DVM.fneSystem.CreateP25MessageHdr((byte)P25DUID.LDU2, callData, ref payload, cryptoParams);
+                    RC2DVM.fneSystem.CreateP25LDU2Message(netLDU2, ref payload, cryptoParams);
+
+                    peer.SendMaster(new Tuple<byte, byte>(Constants.NET_FUNC_PROTOCOL, Constants.NET_PROTOCOL_SUBFUNC_P25), payload, pktSeq, txStreamId);
                 }
 
-                //Log.Logger.Debug("({0:l}) TG {tg} ({TGID}) is strapped or switched secure", Config.Name, CurrentTalkgroup.Name, CurrentTalkgroup.DestinationId);
+                p25SeqNo++;
+                p25N++;
+                return true;
             }
-            
-            // fill the LDU buffers appropriately
-            switch (p25N)
-            {
-                // LDU1
-                case 0:
-                    Buffer.BlockCopy(imbe, 0, netLDU1, 10, FneSystemBase.IMBE_BUF_LEN);
-                    break;
-                case 1:
-                    Buffer.BlockCopy(imbe, 0, netLDU1, 26, FneSystemBase.IMBE_BUF_LEN);
-                    break;
-                case 2:
-                    Buffer.BlockCopy(imbe, 0, netLDU1, 55, FneSystemBase.IMBE_BUF_LEN);
-                    break;
-                case 3:
-                    Buffer.BlockCopy(imbe, 0, netLDU1, 80, FneSystemBase.IMBE_BUF_LEN);
-                    break;
-                case 4:
-                    Buffer.BlockCopy(imbe, 0, netLDU1, 105, FneSystemBase.IMBE_BUF_LEN);
-                    break;
-                case 5:
-                    Buffer.BlockCopy(imbe, 0, netLDU1, 130, FneSystemBase.IMBE_BUF_LEN);
-                    break;
-                case 6:
-                    Buffer.BlockCopy(imbe, 0, netLDU1, 155, FneSystemBase.IMBE_BUF_LEN);
-                    break;
-                case 7:
-                    Buffer.BlockCopy(imbe, 0, netLDU1, 180, FneSystemBase.IMBE_BUF_LEN);
-                    break;
-                case 8:
-                    Buffer.BlockCopy(imbe, 0, netLDU1, 204, FneSystemBase.IMBE_BUF_LEN);
-                    break;
+        }
 
-                // LDU2
-                case 9:
-                    Buffer.BlockCopy(imbe, 0, netLDU2, 10, FneSystemBase.IMBE_BUF_LEN);
-                    break;
-                case 10:
-                    Buffer.BlockCopy(imbe, 0, netLDU2, 26, FneSystemBase.IMBE_BUF_LEN);
-                    break;
-                case 11:
-                    Buffer.BlockCopy(imbe, 0, netLDU2, 55, FneSystemBase.IMBE_BUF_LEN);
-                    break;
-                case 12:
-                    Buffer.BlockCopy(imbe, 0, netLDU2, 80, FneSystemBase.IMBE_BUF_LEN);
-                    break;
-                case 13:
-                    Buffer.BlockCopy(imbe, 0, netLDU2, 105, FneSystemBase.IMBE_BUF_LEN);
-                    break;
-                case 14:
-                    Buffer.BlockCopy(imbe, 0, netLDU2, 130, FneSystemBase.IMBE_BUF_LEN);
-                    break;
-                case 15:
-                    Buffer.BlockCopy(imbe, 0, netLDU2, 155, FneSystemBase.IMBE_BUF_LEN);
-                    break;
-                case 16:
-                    Buffer.BlockCopy(imbe, 0, netLDU2, 180, FneSystemBase.IMBE_BUF_LEN);
-                    break;
-                case 17:
-                    Buffer.BlockCopy(imbe, 0, netLDU2, 204, FneSystemBase.IMBE_BUF_LEN);
-                    break;
-            }
+        /// <summary>
+        /// Pad out the currently in-progress LDU so we don't cut off any end-of-stream audio data
+        /// </summary>
+        /// <param name="srcId"></param>
+        /// <param name="dstId"></param>
+        private void padLDU(uint srcId, uint dstId)
+        {
+            // If we're already at an LDU1/2 boundary, do nothing
+            if (p25N % 9 == 0)
+                return;
 
-            FnePeer peer = RC2DVM.fneSystem.peer;
-            RemoteCallData callData = new RemoteCallData()
-            {
-                SrcId = srcId,
-                DstId = dstId,
-                LCO = P25Defines.LC_GROUP
-            };
-
-            // Setup crypto params
-            CryptoParams cryptoParams = new CryptoParams();
-            if (CurrentTalkgroup.AlgId != P25Defines.P25_ALGO_UNENCRYPT && CurrentTalkgroup.KeyId > 0 && (CurrentTalkgroup.Strapped || Secure))
-            {
-                cryptoParams.AlgoId = CurrentTalkgroup.AlgId;
-                cryptoParams.KeyId = CurrentTalkgroup.KeyId;
-                Array.Copy(callMi, cryptoParams.MI, P25Defines.P25_MI_LENGTH);
-            }
-
-            // send P25 LDU1
-            if (p25N == 8U)
-            {
-                ushort pktSeq = 0;
-                if (p25SeqNo == 0U)
-                    pktSeq = peer.pktSeq(true);
-                else
-                    pktSeq = peer.pktSeq();
-
-                Log.Logger.Information("({0:l}) P25D: Traffic *VOICE FRAME LDU1* PEER {1} SRC_ID {2} TGID {3} [STREAM ID {4}]", Config.Name, RC2DVM.fneSystem.PeerId, srcId, dstId, txStreamId);
-
-                byte[] payload = new byte[200];
-                RC2DVM.fneSystem.CreateP25MessageHdr((byte)P25DUID.LDU1, callData, ref payload, cryptoParams);
-                RC2DVM.fneSystem.CreateP25LDU1Message(netLDU1, ref payload, srcId, dstId);
-
-                peer.SendMaster(new Tuple<byte, byte>(Constants.NET_FUNC_PROTOCOL, Constants.NET_PROTOCOL_SUBFUNC_P25), payload, pktSeq, txStreamId);
-            }
-
-            // send P25 LDU2
-            if (p25N == 17U)
-            {
-                ushort pktSeq = 0;
-                if (p25SeqNo == 0U)
-                    pktSeq = peer.pktSeq(true);
-                else
-                    pktSeq = peer.pktSeq();
-
-                Log.Logger.Information("({0:l}) P25D: Traffic *VOICE FRAME LDU2* PEER {1} SRC_ID {2} TGID {3} [STREAM ID {4}]", Config.Name, RC2DVM.fneSystem.PeerId, srcId, dstId, txStreamId);
-
-                byte[] payload = new byte[200];
-                RC2DVM.fneSystem.CreateP25MessageHdr((byte)P25DUID.LDU2, callData, ref payload, cryptoParams);
-                RC2DVM.fneSystem.CreateP25LDU2Message(netLDU2, ref payload, cryptoParams);
-
-                peer.SendMaster(new Tuple<byte, byte>(Constants.NET_FUNC_PROTOCOL, Constants.NET_PROTOCOL_SUBFUNC_P25), payload, pktSeq, txStreamId);
-            }
-
-            p25SeqNo++;
-            p25N++;
+            // Encode silence
+            byte[] silenceFrame = new byte[FneSystemBase.IMBE_BUF_LEN];
+#if WIN32
+            if (extFullRateVocoder != null)
+                extFullRateVocoder.encode(silence, out silenceFrame);
+            else
+                encoder.encode(silence, silenceFrame);
+#else
+            encoder.enccode(silence, silenceFrame);
 #endif
+
+            // Pad out silence to LDU boundary
+            bool ok = true;
+            while (ok && p25N % 9 != 0)
+            {
+                ok = P25PackImbeFrame((byte[])silenceFrame.Clone(), srcId, dstId);
+            }
         }
 
         /// <summary>
@@ -474,7 +549,7 @@ namespace rc2_dvm
             // Ignore if we're not configure for this TG
             if (!HasTalkgroupConfigured(VocoderMode.P25, e.DstId))
             {
-                Log.Logger.Debug("({0:l} Ignoring data from P25 TGID {1}, channel does not have TGID configured", Config.Name, e.DstId);
+                Log.Logger.Debug("({0:l}) Ignoring data from P25 TGID {1}, channel does not have TGID configured", Config.Name, e.DstId);
                 ignoreStream(e.StreamId);
             }
             // Ignore if we're not connected
