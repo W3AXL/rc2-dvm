@@ -1,20 +1,6 @@
-﻿using System;
-using System.Diagnostics;
-using System.IO;
-using System.Net;
-using System.Net.Sockets;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Reflection;
-using System.Linq;
-
-using Serilog;
-
+﻿using Serilog;
 using fnecore;
 using fnecore.DMR;
-using Microsoft.VisualBasic;
-using SIPSorcery.Media;
-using SIPSorcery.Sys;
 using NAudio.Wave;
 using fnecore.P25.KMM;
 

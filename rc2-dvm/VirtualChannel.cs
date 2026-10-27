@@ -1,34 +1,14 @@
 ﻿using fnecore;
-using fnecore.DMR;
 using fnecore.P25;
 using fnecore.P25.KMM;
 using NAudio.Wave;
-using NAudio.Wave.SampleProviders;
 using Serilog;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Sockets;
-using System.Net;
-using System.Text;
-using System.Threading.Tasks;
-using System.Media;
-using System.Reflection;
-using rc2_core;
 using NWaves.Filters.Butterworth;
 using System.Timers;
-using TinyJson;
-using NAudio.Dsp;
 using NWaves.Signals;
-using NWaves.Signals.Builders;
-using NWaves.Signals.Builders.Base;
 using NWaves.Audio;
 using NWaves.Operations;
-using Org.BouncyCastle.Asn1;
-using NAudio.Midi;
-using System.Linq.Expressions;
 using RadioConsole.Protocol;
-using System.Data;
 
 namespace rc2_dvm
 {
