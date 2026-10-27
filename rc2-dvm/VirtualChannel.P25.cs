@@ -402,7 +402,7 @@ namespace rc2_dvm
             else
                 encoder.encode(silence, silenceFrame);
 #else
-            encoder.enccode(silence, silenceFrame);
+            encoder.encode(silence, silenceFrame);
 #endif
 
             // Pad out silence to LDU boundary
@@ -494,7 +494,7 @@ namespace rc2_dvm
 
                         if (errs != 0)
                         {
-                            Log.Logger.Warning("({0:l}) P25D: Decode Errors: {errs}", errs);
+                            Log.Logger.Warning("({0:l}) P25D: Decode Errors: {errs}", Config.Name, errs);
                         }
 
                         // Convert to floats
@@ -511,7 +511,10 @@ namespace rc2_dvm
                         short[] filtered16 = Utils.FloatToPcm(filtered.Samples);
 
                         // Send to WebRTC
-                        dvmRadio.SendRxPCM16Samples(filtered16, (uint)waveFormat.SampleRate);
+                        //dvmRadio.SendRxPCM16Samples(filtered16, (uint)waveFormat.SampleRate);
+
+                        // Enqueue into RX audio pacer
+                        rxPacer.Enqueue(filtered16);
                     }
                 }
             }

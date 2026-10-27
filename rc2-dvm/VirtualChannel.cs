@@ -28,6 +28,7 @@ using Org.BouncyCastle.Asn1;
 using NAudio.Midi;
 using System.Linq.Expressions;
 using RadioConsole.Protocol;
+using System.Data;
 
 namespace rc2_dvm
 {
@@ -65,7 +66,17 @@ namespace rc2_dvm
         private uint lastSourceId;
         private System.Timers.Timer sourceIdTimer;
 
+        // The RC2 radio instance for this virtual channel
         private DVMRadio dvmRadio;
+
+        private RxAudioPacer rxPacer;
+
+        // Timer for tracking state of the FNE connection to ensure the radio's status is updated accordingly
+        private System.Timers.Timer fneLinkTimer;
+        // Whether the FNE link is up
+        private bool fneLinkUp = false;
+        // Timestamp for audio latency report
+        private int audioReportTicks = 0;
 
         // Local Audio Sidetone
         private WaveOutEvent waveOut;
@@ -295,6 +306,11 @@ namespace rc2_dvm
                 waveOut.Play();
             }
 
+            // Initialize FNE link state timer
+            fneLinkTimer = new System.Timers.Timer(250);
+            fneLinkTimer.Elapsed += fneLinkTimerCallback;
+            fneLinkTimer.AutoReset = true;
+
             // Initialize affiliation holdoff timer
             affHoldoffTimer = new System.Timers.Timer(1000);
             affHoldoffTimer.Elapsed += affToCurrentChannel;
@@ -378,6 +394,14 @@ namespace rc2_dvm
             // Bind TX audio callback
             dvmRadio.OnTxAudio += HandleTxAudio;
 
+            // Initialize RX audio pacer
+            rxPacer = new RxAudioPacer(
+                Config.Name,
+                (samples, rate) => dvmRadio.SendRxPCM16Samples(samples, rate),
+                () => dvmRadio.ConsoleReady && dvmRadio.Status.State is not (RadioState.Disconnected or RadioState.Connecting or RadioState.Disconnecting or RadioState.Error),
+                Config.Audio.RxJitterBufferMs
+            );
+
             dvmRadio.Status.ZoneName = Config.Zone;
             dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
         }
@@ -444,6 +468,12 @@ namespace rc2_dvm
             // Start radio
             dvmRadio.Start();
 
+            // Start RX audio pacer
+            rxPacer.Start();
+
+            // Start FNE link timer
+            fneLinkTimer.Start();
+
             // Load encryption key for home channel if needed
             if (CurrentTalkgroup.KeyId != 0 && !loadedKeys.ContainsKey(CurrentTalkgroup.KeyId))
             {
@@ -460,6 +490,10 @@ namespace rc2_dvm
         /// </summary>
         public void Stop()
         {
+            // Stop FNE link timer
+            fneLinkTimer.Stop();
+            // Stop RX audio pacer
+            rxPacer.Stop();
             // Stop radio
             dvmRadio.Stop();
         }
@@ -487,6 +521,7 @@ namespace rc2_dvm
                 // Update Status
                 dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
                 // Reset any active calls
+                rxPacer.Clear();
                 resetCall();
                 // Restart affiliation timer
                 resetAffTimer();
@@ -519,6 +554,7 @@ namespace rc2_dvm
                 // Update Status
                 dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
                 // Reset any active calls
+                rxPacer.Clear();
                 resetCall();
                 // Restart affiliation timer
                 resetAffTimer();
@@ -554,6 +590,7 @@ namespace rc2_dvm
             // Update Status
             dvmRadio.Status.ChannelName = CurrentTalkgroup.Name;
             // Reset any call
+            rxPacer.Clear();
             resetCall();
             // Restart aff timer
             resetAffTimer();
@@ -681,6 +718,85 @@ namespace rc2_dvm
         }
 
         /// <summary>
+        /// Whether the link to the FNE is up, logged in, and running
+        /// </summary>
+        private bool FneLinkUp
+        {
+            get
+            {
+                return RC2DVM.fneSystem?.peer?.Information?.State == fnecore.ConnectionState.RUNNING;
+            }
+        }
+
+        /// <summary>
+        /// Returns the radio state based on the FNE's current connection status
+        /// </summary>
+        private RadioState IdleState
+        {
+            get
+            {
+                return FneLinkUp ? RadioState.Idle : RadioState.Connecting;
+            }
+        }
+
+        /// <summary>
+        /// Periodic callback to check FNE connection status and update status variables appropriately
+        /// </summary>
+        /// <param name="source"></param>
+        /// <param name="e"></param>
+        private void fneLinkTimerCallback(Object? source,  ElapsedEventArgs e)
+        {
+            try
+            {
+                UpdateFneLinkState();
+
+                if (Config.AudioLatencyReports && ++audioReportTicks >= 240)
+                {
+                    audioReportTicks = 0;
+                    RxAudioPacer.PacerStats stats = rxPacer.GetStats(true);
+                    Log.Logger.Debug("({0:l}) RX pacer (last 60 s): queue {1} ms (peak {2} ms), {3} underruns, {4} ms dropped on overflow, {5} frames ({6} silence)",
+                        Config.Name, stats.QueueMs, stats.PeakQueueMs, stats.Underruns, stats.OverflowMs, stats.FramesEmitted, stats.SilenceFrames);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Logger.Error(ex, "({0:l}) Error updating FNE link state", Config.Name);
+            }
+        }
+
+        /// <summary>
+        /// Handle FNE link state transitions
+        /// </summary>
+        private void UpdateFneLinkState()
+        {
+            bool up = FneLinkUp;
+            if (up == fneLinkUp)
+                return;
+            fneLinkUp = up;
+
+            if (up)
+            {
+                Log.Logger.Information("({0:l}) FNE link is up", Config.Name);
+                // update radio state
+                if (dvmRadio.Status.State == RadioState.Connecting)
+                {
+                    dvmRadio.Status.State = RadioState.Idle;
+                    dvmRadio.RadioStatusCallback();
+                }
+            }
+            else
+            {
+                Log.Logger.Warning("({0:l}) FNE link is down", Config.Name);
+                // If we were transmitting, try to finish properly so we don't hang the TG
+                if (IsTransmitting())
+                    StopTransmit();
+                // Clear out the call data
+                rxPacer.Clear();
+                resetCall();
+            }
+        }
+
+        /// <summary>
         /// Resets current call data
         /// </summary>
         private void resetCall()
@@ -699,9 +815,10 @@ namespace rc2_dvm
             {
                 p25N = 0;
             }
-            // Update status to idle if connected
-            if (Connected)
-                dvmRadio.Status.State = RadioState.Idle;
+            // Update status (IdleState will return either Idle or connecting depending on the current FNE link status)
+            dvmRadio.Status.State = IdleState;
+            // Indicate end of stream to pacer
+            rxPacer.EndOfStream();
             // Reset flags
             callInProgress = false;
             // Reset encryption
@@ -840,7 +957,7 @@ namespace rc2_dvm
                 {
                     scanLandedTg = null;
                     dvmRadio.Status.ChannelName = txTalkgroup.Name;
-                    Log.Logger.Debug("({0:l}) Scan talkback disabled, reverting to selected talkgroup {tg} ({id)", Config.Name, txTalkgroup.Name, txTalkgroup.DestinationId);
+                    Log.Logger.Debug("({0:l}) Scan talkback disabled, reverting to selected talkgroup {tg} ({id})", Config.Name, txTalkgroup.Name, txTalkgroup.DestinationId);
                 }
                 // Either way, we stop the scan hang timer for the duration of the TX
                 Log.Logger.Debug("({0:l}) TX starting, scan hang timer stopped", Config.Name);
@@ -928,7 +1045,7 @@ namespace rc2_dvm
                 scanHangTimer.Start();
             }
             // Update radio status
-            dvmRadio.Status.State = RadioState.Idle;
+            dvmRadio.Status.State = IdleState;
             dvmRadio.RadioStatusCallback();
             // Remove active TG
             return RC2DVM.fneSystem.RemoveActiveTalkgroup(txTalkgroup.DestinationId, txTalkgroup.Timeslot);
@@ -1008,8 +1125,9 @@ namespace rc2_dvm
                 atgSignal = temp;
             }
 
-            // Add silence at the start to account for console unmute delay (200ms seems to be good)
-            atgSignal = atgSignal.Delay(200 * (waveFormat.SampleRate / 1000));
+            // Optional silence at the start of the ATG tone to account for the console's unmute delay
+            if (Config.Audio.AtgToneSilenceMs > 0)
+                atgSignal = atgSignal.Delay(Config.Audio.AtgToneSilenceMs * (waveFormat.SampleRate / 1000));
 
             // Calculate padded length to neatly align with a 9-MBE frame LDU
             int paddedLength = (int)Math.Ceiling((double)atgSignal.Samples.Length / LDU_SAMPLES_LENGTH) * LDU_SAMPLES_LENGTH;
@@ -1035,7 +1153,7 @@ namespace rc2_dvm
             // Debug print
             Log.Logger.Debug("({0:l}) Sending ATG tone to Radio ({0} samples / {1} LDU frames)", Config.Name, toneAtg.Length, skipFrames);
             // Send audio
-            dvmRadio.SendRxPCM16Samples(toneAtg, (uint)waveFormat.SampleRate);
+            rxPacer.Enqueue(toneAtg);
             // Return
             return skipFrames;
         }
@@ -1133,6 +1251,7 @@ namespace rc2_dvm
             scanHangTimer.Stop();
             scanLandedTg = null;
             // Reset all call parameters
+            rxPacer.Clear();
             resetCall();
             // Return true if everything was okay
             return true;

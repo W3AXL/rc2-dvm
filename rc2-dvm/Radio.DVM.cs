@@ -38,13 +38,17 @@ namespace rc2_dvm
         /// <param name="listenPort">server listen port</param>
         /// <param name="talkgroups">available talkgroups</param>
         /// <param name="vChannel">virtual channel instance associated with this radio</param>
+        /// <param name="txAudioSampleRate">sample rate of the audio exchanged with the console (the vocoder rate)</param>
+        /// <param name="reportAudioLatency">whether rc2-core should periodically log RX audio stats</param>
+        /// <param name="reportRtt">whether rc2-core should periodically log console round-trip time stats</param>
         public DVMRadio(
             string name, bool rxOnly,
             IPAddress listenAddress, int listenPort,
             List<IPNetwork> allowedNetworks,
             List<TalkgroupConfigObject> talkgroups, VirtualChannel vChannel, 
-            int txAudioSampleRate
-            ) : base(name, "", rxOnly, listenAddress, listenPort, allowedNetworks, DVMSoftkeys, null, null, txAudioSampleRate)
+            int txAudioSampleRate,
+            bool reportAudioLatency = false, bool reportRtt = false
+            ) : base(name, "", rxOnly, listenAddress, listenPort, allowedNetworks, DVMSoftkeys, null, null, txAudioSampleRate, reportAudioLatency, reportRtt)
         {
             this.talkgroups = talkgroups;
             this.vChannel = vChannel;

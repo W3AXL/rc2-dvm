@@ -67,8 +67,10 @@ namespace rc2_dvm
             catch (FormatException)
             {
                 IPAddress[] addresses = Dns.GetHostAddresses(RC2DVM.Configuration.Network.Address);
-                if (addresses.Length > 0)
-                    endpoint = new IPEndPoint(addresses[0], RC2DVM.Configuration.Network.Port);
+                IPAddress? ipv4 = addresses.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork);
+                if (ipv4 == null)
+                    throw new ArgumentException($"Could not resolve IPv4 address for FNE host {RC2DVM.Configuration.Network.Address}");
+                endpoint = new IPEndPoint(ipv4, RC2DVM.Configuration.Network.Port);
             }
 
             Log.Logger.Information("    Peer ID:              {peerId}", RC2DVM.Configuration.Network.PeerId);

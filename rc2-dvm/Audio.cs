@@ -209,8 +209,8 @@ namespace rc2_dvm
             // Now measure the goertzel fraction for the detected tone frequency
             float frac = GetToneFraction(signal.Samples, freq);
 
-            // TEMP debug logging
-            Log.Logger.Debug("TONE FRAC {0:0.000}", frac);
+            // Verbose tone detector logging
+            Log.Logger.Verbose("TONE FRAC {0:0.000}", frac);
 
             // Determine which threshold we should be using
             float threshold = (last_tone != 0) ? TONE_END_THRESHOLD : TONE_START_THRESHOLD;

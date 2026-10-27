@@ -89,6 +89,14 @@ namespace rc2_dvm
         /// Upper limit for tone detection in Hz
         /// </summary>
         public int TxToneUpperLimit = 3000;
+        /// <summary>
+        /// Size of the RX audio jitter buffer in ms
+        /// </summary>
+        public int RxJitterBufferMs = 60;
+        /// <summary>
+        /// Amount of silence before the ATG tone, to handle the console's unmute delay
+        /// </summary>
+        public int AtgToneSilenceMs = 0;
     }
 
     /// <summary>
@@ -206,6 +214,14 @@ namespace rc2_dvm
         /// Override of global scan config for this virtual channel only
         /// </summary>
         public ScanConfigObject? Scan;
+        /// <summary>
+        /// Whether to print periodic audio latency reports
+        /// </summary>
+        public bool AudioLatencyReports = false;
+        /// <summary>
+        /// Whether to print periodic rount trip time reports
+        /// </summary>
+        public bool RttReports = false;
     }
 
     /// <summary>
@@ -258,7 +274,7 @@ namespace rc2_dvm
         /// </summary>
         public bool Debug = false;
         /// <summary>
-        /// List of allowed subnets/networks for incoming WebRTC connections
+        /// List of allowed subnets/networks for incoming console connections
         /// </summary>
         public List<IPNetwork> AllowedNetworks = new();
     }

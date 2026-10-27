@@ -150,7 +150,7 @@ namespace rc2_dvm
                     emb.Encode(ref data);
                 }
 
-                Log.Logger.Information("({0:l}) DMRD: Traffic *VOICE FRAME    * PEER {1} SRC_ID {2} TGID {3} TS {4} VC{} [STREAM ID {5}]", Config.Name, RC2DVM.fneSystem.PeerId, srcId, dstId, slot, dmrN, txStreamId);
+                Log.Logger.Information("({0:l}) DMRD: Traffic *VOICE FRAME    * PEER {1} SRC_ID {2} TGID {3} TS {4} VC{5} [STREAM ID {6}]", Config.Name, RC2DVM.fneSystem.PeerId, srcId, dstId, slot, dmrN, txStreamId);
 
                 // generate DMR network frame
                 dmrpkt = new byte[FneSystemBase.DMR_PACKET_SIZE];
@@ -257,8 +257,10 @@ namespace rc2_dvm
                             gainControl.Read(pcm, 0, pcm.Length);
                         }
 
-                        // TODO: Write the decoded audio to the WebRTC audio stream
-
+                        // Write the decoded audio to the RX queue (TODO: verify this works)
+                        short[] decodedFrame = new short[pcm.Length / 2];
+                        Buffer.BlockCopy(pcm, 0, decodedFrame, 0, pcm.Length);
+                        rxPacer.Enqueue(decodedFrame);
                     }
                 }
             }
